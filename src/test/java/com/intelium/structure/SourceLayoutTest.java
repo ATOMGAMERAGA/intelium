@@ -173,13 +173,18 @@ class SourceLayoutTest {
     }
 
     @Test
-    @DisplayName("LICENSE mentions LGPL")
-    void licenseIsLgpl() throws IOException {
+    @DisplayName("LICENSE is a GPL-family license")
+    void licenseIsGplFamily() throws IOException {
         Path p = TestPaths.projectRoot().resolve("LICENSE");
-        String content = Files.readString(p);
-        assertTrue(content.contains("GNU LESSER GENERAL PUBLIC LICENSE")
-                || content.contains("Lesser General Public License")
-                || content.contains("LGPL"));
+        // Collapse whitespace so cross-line phrases ("Lesser General\nPublic
+        // License") still match a single-line search.
+        String content = Files.readString(p).replaceAll("\\s+", " ").toLowerCase();
+        assertTrue(
+                content.contains("gnu general public license")
+                        || content.contains("gnu lesser general public license")
+                        || content.contains("gpl")
+                        || content.contains("lgpl"),
+                "LICENSE must declare a GPL-family license");
     }
 
     @Test

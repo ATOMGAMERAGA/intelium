@@ -25,7 +25,12 @@ class PackageClassPresenceTest {
     })
     @DisplayName("Class is loadable")
     void classLoads(String fqcn) {
-        assertDoesNotThrow(() -> Class.forName(fqcn),
+        // initialize=false: just load the bytecode without running static
+        // initializers. InteliumConfigIO and InteliumConfigEntryPoint touch
+        // FabricLoader.getInstance() in their static state, which isn't
+        // available outside a real Fabric runtime.
+        ClassLoader loader = PackageClassPresenceTest.class.getClassLoader();
+        assertDoesNotThrow(() -> Class.forName(fqcn, false, loader),
                 "Class.forName failed for " + fqcn);
     }
 

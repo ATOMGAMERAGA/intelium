@@ -68,23 +68,40 @@ public final class IntelGpuDetector {
 
     static IntelGpuGeneration classifyIntelRenderer(String renderer) {
         if (renderer == null) return IntelGpuGeneration.UNKNOWN;
-        String r = renderer.toLowerCase(Locale.ROOT);
+        // Strip trademark markers like "(R)" and "(TM)" so "Iris(R) Plus"
+        // becomes "Iris Plus" - this lets our keyword checks be plain substrings.
+        String r = renderer.toLowerCase(Locale.ROOT)
+                .replace("(r)", "")
+                .replace("(tm)", "")
+                .replaceAll("\\s+", " ");
 
-        if (r.contains("arc") && (r.contains("b3") || r.contains("b4") || r.contains("b5") || r.contains("b7") || r.contains("battlemage") || r.contains("bmg")))
+        // Battlemage / Xe2 first - mention of "battlemage", "bmg", or Arc B-series.
+        if (r.contains("battlemage") || r.contains("bmg") || r.contains("lunar"))
             return IntelGpuGeneration.XE2_LUNAR_BATTLEMAGE;
-        if (r.contains("lunar"))
+        if (r.contains("arc") && (r.contains("b3") || r.contains("b4") ||
+                                  r.contains("b5") || r.contains("b7")))
             return IntelGpuGeneration.XE2_LUNAR_BATTLEMAGE;
+
+        // Alchemist (first-gen Arc, Xe-HPG).
         if (r.contains("arc") || r.contains("alchemist") || r.contains("dg2"))
             return IntelGpuGeneration.XE_HPG_ARC_ALCHEMIST;
-        if (r.contains("xe") || r.contains("tgl") || r.contains("tiger lake") || r.contains("alder lake") || r.contains("raptor lake") || r.contains("meteor lake"))
-            return IntelGpuGeneration.GEN12_XE_LP;
+
+        // Ice Lake / Iris Plus before generic Xe match - some Iris Plus strings
+        // ("Iris Plus Graphics 640/655") otherwise fall through.
         if (r.contains("iris plus") || r.contains("ice lake") || r.contains("icl"))
             return IntelGpuGeneration.GEN11_ICE_LAKE;
+
+        // Xe-LP / Gen 12.
+        if (r.contains("xe") || r.contains("tgl") || r.contains("tiger lake") ||
+            r.contains("alder lake") || r.contains("raptor lake") || r.contains("meteor lake"))
+            return IntelGpuGeneration.GEN12_XE_LP;
+
         if (r.contains("uhd graphics 6") || r.contains("uhd graphics 7") ||
             r.contains("kaby lake") || r.contains("coffee lake") || r.contains("comet lake") ||
             r.contains("whiskey lake"))
             return IntelGpuGeneration.GEN9_5_KABY_COFFEE;
-        if (r.contains("hd graphics 5") || r.contains("hd graphics 6") || r.contains("skylake") || r.contains("skl"))
+        if (r.contains("hd graphics 5") || r.contains("hd graphics 6") ||
+            r.contains("skylake") || r.contains("skl"))
             return IntelGpuGeneration.GEN9_SKYLAKE;
 
         if (r.contains("hd graphics 4") || r.contains("hd graphics 3") ||

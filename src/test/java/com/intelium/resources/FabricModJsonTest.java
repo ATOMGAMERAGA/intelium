@@ -70,9 +70,9 @@ class FabricModJsonTest {
     }
 
     @Test
-    @DisplayName("license is LGPL-3.0-only")
+    @DisplayName("license is GPL-3.0-only (matches repo LICENSE file)")
     void license() {
-        assertEquals("LGPL-3.0-only", json.get("license").getAsString());
+        assertEquals("GPL-3.0-only", json.get("license").getAsString());
     }
 
     @Test
