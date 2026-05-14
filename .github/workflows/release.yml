@@ -180,12 +180,13 @@ jobs:
 
       - name: Generate self-signed code-signing keystore
         run: |
+          # PKCS12 only supports one password for the key store and the key
+          # entry (modern keytool will warn and ignore -keypass if they differ,
+          # then jarsigner fails to unlock the private key with "not a private
+          # key"). Use a single random password for both.
           KEYSTORE_PASS=$(openssl rand -hex 32)
-          KEY_PASS=$(openssl rand -hex 32)
           echo "::add-mask::$KEYSTORE_PASS"
-          echo "::add-mask::$KEY_PASS"
           echo "KEYSTORE_PASS=$KEYSTORE_PASS" >> "$GITHUB_ENV"
-          echo "KEY_PASS=$KEY_PASS" >> "$GITHUB_ENV"
           keytool -genkeypair \
             -alias intelium-build \
             -keyalg RSA -keysize 4096 \
@@ -193,7 +194,7 @@ jobs:
             -storetype PKCS12 \
             -keystore intelium-build.p12 \
             -storepass "$KEYSTORE_PASS" \
-            -keypass "$KEY_PASS" \
+            -keypass "$KEYSTORE_PASS" \
             -dname "CN=Intelium Build CI, OU=Intelium Mod CI, O=Intelium Contributors, L=Internet, ST=NA, C=NA" \
             -validity 3650
           echo "Keystore generated:"
@@ -226,7 +227,7 @@ jobs:
             -keystore intelium-build.p12 \
             -storetype PKCS12 \
             -storepass "$KEYSTORE_PASS" \
-            -keypass "$KEY_PASS" \
+            -keypass "$KEYSTORE_PASS" \
             -sigalg SHA256withRSA \
             -digestalg SHA-256 \
             "$JAR_FILE" \
@@ -244,7 +245,7 @@ jobs:
               -keystore intelium-build.p12 \
               -storetype PKCS12 \
               -storepass "$KEYSTORE_PASS" \
-              -keypass "$KEY_PASS" \
+              -keypass "$KEYSTORE_PASS" \
               -sigalg SHA256withRSA \
               -digestalg SHA-256 \
               "$SRC_JAR" \
