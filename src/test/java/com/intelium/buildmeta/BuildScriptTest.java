@@ -29,10 +29,12 @@ class BuildScriptTest {
     }
 
     @Test
-    @DisplayName("build.gradle uses loom 1.14")
+    @DisplayName("build.gradle uses Loom 1.14 or newer")
     void loomVersion() {
-        assertTrue(buildGradle.contains("1.14"),
-                "must reference Loom 1.14");
+        // Sodium 0.8.11 is built with Loom 1.16.1, so we track that line.
+        // Accept any "1.1[4-9]-SNAPSHOT" or "1.2x" for forward compat.
+        assertTrue(buildGradle.matches("(?s).*fabric-loom['\"]\\s+version\\s+['\"]1\\.(1[4-9]|2\\d)-SNAPSHOT.*"),
+                "must reference Loom 1.14 or newer");
     }
 
     @Test
