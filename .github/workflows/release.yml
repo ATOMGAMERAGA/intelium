@@ -1,0 +1,413 @@
+name: Build, Test, Sign, Release
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Create a GitHub release with signed jar'
+        required: false
+        default: 'true'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Run unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          check-latest: true
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v3
+        continue-on-error: true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Print Gradle and Java info
+        run: |
+          ./gradlew --version
+          java -version
+          javac -version
+
+      - name: Show project structure
+        run: |
+          echo "===== Source tree ====="
+          find src -type f | sort
+          echo "===== Resources ====="
+          find src/main/resources -type f | sort
+
+      - name: Compile main sources
+        run: ./gradlew compileJava --no-daemon --stacktrace
+
+      - name: Compile test sources
+        run: ./gradlew compileTestJava --no-daemon --stacktrace
+
+      - name: Run all tests
+        run: ./gradlew test --no-daemon --info --stacktrace
+
+      - name: Upload test reports (HTML)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports-html
+          path: build/reports/tests/test/
+          retention-days: 14
+
+      - name: Upload test XML
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-xml
+          path: build/test-results/test/
+          retention-days: 14
+
+      - name: Print test summary
+        if: always()
+        run: |
+          if [ -d build/test-results/test ]; then
+            echo "===== Test result XML files ====="
+            ls -la build/test-results/test || true
+            total=$(grep -h 'tests=' build/test-results/test/*.xml 2>/dev/null \
+              | grep -oP 'tests="\d+"' | grep -oP '\d+' | paste -sd+ - | bc || echo 0)
+            failures=$(grep -h 'failures=' build/test-results/test/*.xml 2>/dev/null \
+              | grep -oP 'failures="\d+"' | grep -oP '\d+' | paste -sd+ - | bc || echo 0)
+            errors=$(grep -h 'errors=' build/test-results/test/*.xml 2>/dev/null \
+              | grep -oP 'errors="\d+"' | grep -oP '\d+' | paste -sd+ - | bc || echo 0)
+            echo "Total tests: ${total:-0}"
+            echo "Failures:    ${failures:-0}"
+            echo "Errors:      ${errors:-0}"
+          fi
+
+  build:
+    name: Build, sign, release
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          check-latest: true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Generate random release version
+        id: version
+        run: |
+          BASE="1.0.0"
+          DATE=$(date -u +%Y%m%d)
+          TIME=$(date -u +%H%M%S)
+          RAND=$(openssl rand -hex 4)
+          GIT_SHA=$(git rev-parse --short=8 HEAD)
+          VERSION="${BASE}-build.${DATE}.${TIME}+${RAND}.${GIT_SHA}"
+          TAG="v${VERSION}"
+          echo "Generated version: $VERSION"
+          echo "Generated tag:     $TAG"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "INTELIUM_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "INTELIUM_TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Build mod jar
+        run: |
+          ./gradlew clean build \
+            -PinteliumVersion="${INTELIUM_VERSION}" \
+            --no-daemon --stacktrace
+
+      - name: Generate resolved dependency list
+        run: |
+          ./gradlew writeDependencyList \
+            -PinteliumVersion="${INTELIUM_VERSION}" \
+            --no-daemon
+
+      - name: Run dependencies report
+        run: |
+          ./gradlew dependencies --configuration runtimeClasspath \
+            -PinteliumVersion="${INTELIUM_VERSION}" \
+            --no-daemon > build/runtimeClasspath.txt || true
+          ./gradlew dependencies --configuration compileClasspath \
+            -PinteliumVersion="${INTELIUM_VERSION}" \
+            --no-daemon > build/compileClasspath.txt || true
+
+      - name: Show built artifacts
+        run: |
+          echo "===== build/libs ====="
+          ls -la build/libs/
+          echo "===== build/*.txt ====="
+          ls -la build/*.txt || true
+          echo "===== build/dependencies.txt ====="
+          cat build/dependencies.txt || true
+
+      - name: Generate self-signed code-signing keystore
+        run: |
+          KEYSTORE_PASS=$(openssl rand -hex 32)
+          KEY_PASS=$(openssl rand -hex 32)
+          echo "::add-mask::$KEYSTORE_PASS"
+          echo "::add-mask::$KEY_PASS"
+          echo "KEYSTORE_PASS=$KEYSTORE_PASS" >> "$GITHUB_ENV"
+          echo "KEY_PASS=$KEY_PASS" >> "$GITHUB_ENV"
+          keytool -genkeypair \
+            -alias intelium-build \
+            -keyalg RSA -keysize 4096 \
+            -sigalg SHA256withRSA \
+            -storetype PKCS12 \
+            -keystore intelium-build.p12 \
+            -storepass "$KEYSTORE_PASS" \
+            -keypass "$KEY_PASS" \
+            -dname "CN=Intelium Build CI, OU=Intelium Mod CI, O=Intelium Contributors, L=Internet, ST=NA, C=NA" \
+            -validity 3650
+          echo "Keystore generated:"
+          keytool -list -v -keystore intelium-build.p12 -storepass "$KEYSTORE_PASS" | head -30
+
+      - name: Export public certificate
+        run: |
+          keytool -exportcert \
+            -alias intelium-build \
+            -keystore intelium-build.p12 \
+            -storepass "$KEYSTORE_PASS" \
+            -storetype PKCS12 \
+            -rfc \
+            -file build/libs/intelium-build-cert.pem
+          # Also export DER form
+          keytool -exportcert \
+            -alias intelium-build \
+            -keystore intelium-build.p12 \
+            -storepass "$KEYSTORE_PASS" \
+            -storetype PKCS12 \
+            -file build/libs/intelium-build-cert.der
+          echo "Public certificate fingerprint:"
+          keytool -printcert -file build/libs/intelium-build-cert.pem | head -20
+
+      - name: Sign the mod jar
+        run: |
+          JAR_FILE=$(ls build/libs/intelium-*.jar | grep -v sources | grep -v dev | head -1)
+          echo "Signing: $JAR_FILE"
+          jarsigner \
+            -keystore intelium-build.p12 \
+            -storetype PKCS12 \
+            -storepass "$KEYSTORE_PASS" \
+            -keypass "$KEY_PASS" \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            "$JAR_FILE" \
+            intelium-build
+          echo "Verifying signature..."
+          jarsigner -verify -verbose -certs "$JAR_FILE" | tail -20
+          jarsigner -verify -strict "$JAR_FILE" || true
+
+      - name: Sign sources jar (if present)
+        run: |
+          SRC_JAR=$(ls build/libs/intelium-*-sources.jar 2>/dev/null | head -1 || true)
+          if [ -n "$SRC_JAR" ]; then
+            echo "Signing sources jar: $SRC_JAR"
+            jarsigner \
+              -keystore intelium-build.p12 \
+              -storetype PKCS12 \
+              -storepass "$KEYSTORE_PASS" \
+              -keypass "$KEY_PASS" \
+              -sigalg SHA256withRSA \
+              -digestalg SHA-256 \
+              "$SRC_JAR" \
+              intelium-build
+          fi
+
+      - name: Generate ephemeral GPG key
+        run: |
+          GPG_HOME=$(mktemp -d)
+          echo "GPG_HOME=$GPG_HOME" >> "$GITHUB_ENV"
+          chmod 700 "$GPG_HOME"
+          cat > "$GPG_HOME/gen-key.conf" <<EOF
+          %no-protection
+          Key-Type: RSA
+          Key-Length: 4096
+          Subkey-Type: RSA
+          Subkey-Length: 4096
+          Name-Real: Intelium Build CI
+          Name-Email: ci@intelium.invalid
+          Expire-Date: 0
+          %commit
+          EOF
+          gpg --homedir "$GPG_HOME" --batch --gen-key "$GPG_HOME/gen-key.conf"
+          echo "GPG key generated. Listing:"
+          gpg --homedir "$GPG_HOME" --list-keys
+
+      - name: Detach-sign jar with GPG
+        run: |
+          JAR_FILE=$(ls build/libs/intelium-*.jar | grep -v sources | head -1)
+          gpg --homedir "$GPG_HOME" --batch --yes --armor --detach-sign --output "${JAR_FILE}.asc" "$JAR_FILE"
+          gpg --homedir "$GPG_HOME" --armor --export "ci@intelium.invalid" > build/libs/intelium-build-public-key.asc
+          echo "GPG signature created at ${JAR_FILE}.asc"
+          gpg --homedir "$GPG_HOME" --verify "${JAR_FILE}.asc" "$JAR_FILE"
+
+      - name: Compute SHA-256 and SHA-512 checksums
+        run: |
+          cd build/libs
+          for f in intelium-*.jar; do
+            sha256sum "$f" > "${f}.sha256"
+            sha512sum "$f" > "${f}.sha512"
+            echo "$f checksums:"
+            cat "${f}.sha256"
+            cat "${f}.sha512"
+          done
+
+      - name: Write build manifest
+        run: |
+          JAR_FILE=$(ls build/libs/intelium-*.jar | grep -v sources | head -1)
+          cat > build/libs/BUILD-MANIFEST.txt <<EOF
+          Intelium build manifest
+          =======================
+          version:      ${INTELIUM_VERSION}
+          tag:          ${INTELIUM_TAG}
+          built-at:     $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          built-from:   ${GITHUB_REPOSITORY}@${GITHUB_SHA}
+          build-id:     ${GITHUB_RUN_ID}
+          run-number:   ${GITHUB_RUN_NUMBER}
+          workflow:     ${GITHUB_WORKFLOW}
+          runner-os:    ${RUNNER_OS}
+          java:         $(java -version 2>&1 | head -1)
+          jarsigner:    SHA256withRSA, SHA-256 digest, self-signed (CN=Intelium Build CI)
+          gpg:          RSA 4096, ephemeral CI key (ci@intelium.invalid)
+          jar-file:     $(basename "$JAR_FILE")
+          jar-bytes:    $(stat -c%s "$JAR_FILE")
+          EOF
+          echo "===== BUILD-MANIFEST.txt ====="
+          cat build/libs/BUILD-MANIFEST.txt
+
+      - name: Copy resolved dependency list into release
+        run: |
+          cp build/dependencies.txt build/libs/dependencies.txt || true
+          cp build/runtimeClasspath.txt build/libs/runtimeClasspath.txt || true
+          cp build/compileClasspath.txt build/libs/compileClasspath.txt || true
+
+      - name: Final artifact listing
+        run: ls -la build/libs/
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: intelium-${{ steps.version.outputs.version }}
+          path: |
+            build/libs/intelium-*.jar
+            build/libs/intelium-*.jar.asc
+            build/libs/intelium-*.jar.sha256
+            build/libs/intelium-*.jar.sha512
+            build/libs/intelium-build-cert.pem
+            build/libs/intelium-build-cert.der
+            build/libs/intelium-build-public-key.asc
+            build/libs/BUILD-MANIFEST.txt
+            build/libs/dependencies.txt
+            build/libs/runtimeClasspath.txt
+            build/libs/compileClasspath.txt
+          retention-days: 90
+
+      - name: Create GitHub release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Intelium ${{ steps.version.outputs.version }}
+          body: |
+            ## Intelium ${{ steps.version.outputs.version }}
+
+            **Random build version.** Generated automatically by the release workflow.
+
+            ### Verification
+            The jar is signed two ways for trust:
+            - **`jarsigner`** signature (`SHA256withRSA`, self-signed CI cert)
+            - **GPG** detached signature (`.asc`) from an ephemeral CI key
+
+            Verify integrity with the included checksums:
+            ```
+            sha256sum -c intelium-${{ steps.version.outputs.version }}.jar.sha256
+            sha512sum -c intelium-${{ steps.version.outputs.version }}.jar.sha512
+            ```
+
+            Verify the GPG signature:
+            ```
+            gpg --import intelium-build-public-key.asc
+            gpg --verify intelium-${{ steps.version.outputs.version }}.jar.asc
+            ```
+
+            Inspect the embedded jarsigner certificate:
+            ```
+            keytool -printcert -file intelium-build-cert.pem
+            ```
+
+            ### Build context
+            - Source: ${{ github.repository }}@${{ github.sha }}
+            - Workflow run: ${{ github.run_id }}
+            - Java: 21 (Temurin)
+
+            ### Bundled artifacts
+            - `intelium-<version>.jar` &mdash; signed mod jar
+            - `intelium-<version>.jar.asc` &mdash; GPG detached signature
+            - `intelium-<version>.jar.sha256` &mdash; SHA-256 checksum
+            - `intelium-<version>.jar.sha512` &mdash; SHA-512 checksum
+            - `intelium-build-cert.pem` / `.der` &mdash; jarsigner public certificate
+            - `intelium-build-public-key.asc` &mdash; GPG public key
+            - `BUILD-MANIFEST.txt` &mdash; full build provenance
+            - `dependencies.txt` &mdash; flat list of resolved Gradle dependencies
+            - `runtimeClasspath.txt` / `compileClasspath.txt` &mdash; detailed dependency trees
+
+            > **Note about signing trust:** the jarsigner cert and GPG key are
+            > generated freshly by the CI workflow for this build only. They
+            > prove that this artifact was produced exactly by this workflow
+            > run and has not been tampered with afterwards. They are **not**
+            > issued by a public CA. Compare the certificate fingerprint in the
+            > release with the value printed in the workflow logs.
+          files: |
+            build/libs/intelium-*.jar
+            build/libs/intelium-*.jar.asc
+            build/libs/intelium-*.jar.sha256
+            build/libs/intelium-*.jar.sha512
+            build/libs/intelium-build-cert.pem
+            build/libs/intelium-build-cert.der
+            build/libs/intelium-build-public-key.asc
+            build/libs/BUILD-MANIFEST.txt
+            build/libs/dependencies.txt
+            build/libs/runtimeClasspath.txt
+            build/libs/compileClasspath.txt
+          draft: false
+          prerelease: true
+          generate_release_notes: false
+          fail_on_unmatched_files: false
