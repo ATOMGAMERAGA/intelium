@@ -97,7 +97,8 @@ test {
 // Trustworthy build manifest entries
 jar {
     from("LICENSE") {
-        rename { "${it}_${project.archivesBaseName}" }
+        // Gradle 9 removed Project.archivesBaseName; use the BasePluginExtension.
+        rename { "${it}_${base.archivesName.get()}" }
     }
     manifest {
         attributes(
@@ -167,15 +168,18 @@ tasks.register('writeDependencyList') {
     }
 }
 
-// Task: produce SHA-256 + SHA-512 for the final jar
+// Task: produce SHA-256 + SHA-512 for the final, remapped mod jar.
+// Loom's :jar task emits the dev (intermediary-mapped) jar into build/devlibs/;
+// the publishable mod jar is produced by :remapJar into build/libs/. We hash
+// the latter so the checksums shipped to users match the file they download.
 tasks.register('writeChecksums') {
-    description = 'Writes SHA-256 and SHA-512 checksums for the main jar'
+    description = 'Writes SHA-256 and SHA-512 checksums for the remapped mod jar'
     group = 'verification'
-    dependsOn jar
+    dependsOn tasks.named('remapJar')
     doLast {
-        def jarFile = jar.archiveFile.get().asFile
+        def jarFile = tasks.named('remapJar').get().archiveFile.get().asFile
         if (!jarFile.exists()) {
-            throw new GradleException("Jar file not found at ${jarFile.absolutePath}")
+            throw new GradleException("Remapped jar not found at ${jarFile.absolutePath}")
         }
         ['SHA-256', 'SHA-512'].each { algo ->
             def md = java.security.MessageDigest.getInstance(algo)
