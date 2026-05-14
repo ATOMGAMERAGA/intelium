@@ -97,7 +97,8 @@ test {
 // Trustworthy build manifest entries
 jar {
     from("LICENSE") {
-        rename { "${it}_${project.archivesBaseName}" }
+        // Gradle 9 removed Project.archivesBaseName; use the BasePluginExtension.
+        rename { "${it}_${base.archivesName.get()}" }
     }
     manifest {
         attributes(
