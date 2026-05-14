@@ -48,8 +48,13 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-    // Sodium hard dependency (MC 1.21.11 uses modImplementation per Sodium USAGE.md)
-    modImplementation "net.caffeinemc:sodium-fabric-api:${project.sodium_version}"
+    // Sodium hard dependency.
+    // Intelium mixins reference Sodium internals (client.render.chunk.*) which
+    // are NOT in the sodium-fabric-api artifact - that only ships the public
+    // api.* surface. So we pull the full Sodium jar from Modrinth maven.
+    // gradle.properties keeps the canonical "<ver>+mc<mc>" form; here we
+    // assemble the Modrinth coordinate "mc<mc>-<ver>-fabric".
+    modImplementation "maven.modrinth:sodium:mc${project.minecraft_version}-${project.sodium_version.split('\\+mc')[0]}-fabric"
 
     // Test dependencies
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'

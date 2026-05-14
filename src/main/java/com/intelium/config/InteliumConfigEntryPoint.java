@@ -2,13 +2,14 @@ package com.intelium.config;
 
 import com.intelium.Intelium;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
+import net.caffeinemc.mods.sodium.api.config.StorageEventHandler;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
 public class InteliumConfigEntryPoint implements ConfigEntryPoint {
 
-    private final Runnable saveHook = InteliumConfigIO::flush;
+    private final StorageEventHandler saveHook = InteliumConfigIO::flush;
 
     @Override
     public void registerConfigLate(ConfigBuilder builder) {

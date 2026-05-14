@@ -50,8 +50,11 @@ class BuildScriptTest {
     @Test
     @DisplayName("build.gradle uses modImplementation for Sodium")
     void sodiumIsModImplementation() {
+        // Either the API-only artifact or the full Modrinth jar.
+        // Intelium needs the full jar to mixin Sodium internals.
         assertTrue(buildGradle.contains("modImplementation \"net.caffeinemc:sodium-fabric-api")
-                || buildGradle.contains("modImplementation \"net.caffeinemc:sodium-fabric-api:"));
+                        || buildGradle.contains("modImplementation \"maven.modrinth:sodium"),
+                "build.gradle must declare a Sodium modImplementation dependency");
     }
 
     @Test
