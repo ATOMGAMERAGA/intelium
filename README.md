@@ -1,8 +1,27 @@
+<p align="center">
+  <img src="assets/branding/logo-256.png" alt="Intelium" width="160" height="160">
+</p>
+
 # Intelium
 
 **Intelium** is a Fabric mod that optimizes Sodium's rendering backend for
 Intel GPUs. It is the Intel counterpart to Nvidium (which targets NVIDIA
 GeForce cards) and stays out of the way on systems where it does not apply.
+
+## Branding assets
+
+Universal logo (square, transparent PNG, sRGB) lives under
+`assets/branding/`:
+
+| File | Size | Use case |
+|---|---|---|
+| `logo-512.png` | 512x512 | Modrinth / CurseForge cover, web |
+| `logo-256.png` | 256x256 | README, docs, medium previews |
+| `logo-128.png` | 128x128 | Source master |
+| `logo-64.png`  | 64x64   | Favicon, small UI |
+
+The in-game / Fabric loader icon is generated from the same source at 32x32
+in `src/main/resources/assets/intelium/icon.png`.
 
 ## What it does
 
