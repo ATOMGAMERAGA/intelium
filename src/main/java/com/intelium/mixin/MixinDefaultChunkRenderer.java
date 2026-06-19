@@ -12,17 +12,25 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = DefaultChunkRenderer.class, remap = false)
 public abstract class MixinDefaultChunkRenderer {
 
-    @Inject(method = "render", at = @At("HEAD"))
+    @Inject(method = "render", at = @At("HEAD"), require = 0)
     private void intelium$prepareBatches(CallbackInfo ci) {
-        if (!Intelium.IS_ENABLED || !Intelium.IS_COMPATIBLE) return;
-        if (!InteliumConfigIO.get().drawCallBatching) return;
-        DrawCallBatcher.beginFrame(Intelium.DETECTED_GENERATION);
+        try {
+            if (!Intelium.IS_ENABLED || !Intelium.IS_COMPATIBLE) return;
+            if (!InteliumConfigIO.get().drawCallBatching) return;
+            DrawCallBatcher.beginFrame(Intelium.DETECTED_GENERATION);
+        } catch (Throwable t) {
+            Intelium.LOGGER.warn("Intelium draw-batch prepare failed; skipping.", t);
+        }
     }
 
-    @Inject(method = "render", at = @At("RETURN"))
+    @Inject(method = "render", at = @At("RETURN"), require = 0)
     private void intelium$flushBatches(CallbackInfo ci) {
-        if (!Intelium.IS_ENABLED || !Intelium.IS_COMPATIBLE) return;
-        if (!InteliumConfigIO.get().drawCallBatching) return;
-        DrawCallBatcher.endFrame();
+        try {
+            if (!Intelium.IS_ENABLED || !Intelium.IS_COMPATIBLE) return;
+            if (!InteliumConfigIO.get().drawCallBatching) return;
+            DrawCallBatcher.endFrame();
+        } catch (Throwable t) {
+            Intelium.LOGGER.warn("Intelium draw-batch flush failed; skipping.", t);
+        }
     }
 }

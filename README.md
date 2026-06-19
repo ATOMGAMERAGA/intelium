@@ -25,16 +25,23 @@ in `src/main/resources/assets/intelium/icon.png`.
 
 ## What it does
 
-| Area | Optimization |
-|---|---|
-| Draw-call submission | Coalesces small `glDrawElementsIndirect` calls into batched MDI submissions to reduce Intel driver overhead |
-| Chunk build threading | Tunes the number of chunk build worker threads against the shared CPU/iGPU TDP |
-| Buffer strategy | Uses persistent mapped buffers (`GL_ARB_buffer_storage`) instead of orphan-and-respec |
-| Occlusion culling | Tightens visibility tests on weaker iGPUs to feed the GPU fewer, larger batches |
+| Area | Optimization | Status |
+|---|---|---|
+| Chunk build threading | Tunes the number of chunk build worker threads against the GPU generation and the shared CPU/iGPU TDP. Hooks `ChunkBuilder.getThreadCount()` and only overrides when Sodium's own thread setting is on "auto". | **Active** |
+| Occlusion culling | Picks a generation-aware visibility tightening factor each frame on weaker iGPUs. | Advisory |
+| Draw-call submission | Picks a generation-aware indirect-draw batch size. | Advisory |
+| Buffer strategy | Selects persistent-mapped-buffer flags (`GL_ARB_buffer_storage`) for capable generations. | Advisory |
+
+**Active** features change Sodium's behaviour directly. **Advisory** features
+compute generation-aware parameters that are exposed and unit-tested but do not
+yet override Sodium's internal GL path — they are safe no-ops at runtime and are
+guarded so they can never crash the game or conflict with other Sodium add-ons.
+See [`KNOWN_LIMITATIONS`](#known-limitations).
 
 Intelium auto-disables on NVIDIA, AMD, or unknown GPUs, and on Intel parts
 older than HD Graphics 520 (Gen 9 / Skylake, 2015). On those systems Sodium
-runs unmodified.
+runs unmodified. Every hook is wrapped so a failure inside Intelium degrades to
+"Sodium default" instead of crashing.
 
 ## Requirements
 
@@ -77,6 +84,18 @@ Settings are exposed inside Sodium's Video Settings screen under an
 ```
 
 The mod jar lands in `build/libs/intelium-<version>.jar`.
+
+## Known limitations
+
+- Only the **chunk build worker tuning** changes Sodium's runtime behaviour
+  today. Draw-call batching, persistent buffers and aggressive occlusion are
+  generation-aware *advisors*: the parameters are computed and unit-tested, but
+  wiring them into Sodium's internal GL path safely requires in-game profiling
+  on real Intel hardware and is tracked as future work. They are deliberately
+  inert at runtime so they cannot crash or break compatibility.
+- Expect the biggest wins from worker tuning on low-end iGPUs (Gen 9 / 9.5 / 11)
+  where Sodium's automatic thread count is conservative. On Arc discrete cards
+  the change is small.
 
 ## License
 

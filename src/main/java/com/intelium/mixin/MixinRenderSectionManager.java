@@ -13,12 +13,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = RenderSectionManager.class, remap = false)
 public abstract class MixinRenderSectionManager {
 
-    @Inject(method = "update", at = @At("HEAD"))
+    @Inject(method = "update", at = @At("HEAD"), require = 0)
     private void intelium$adjustCulling(CallbackInfo ci) {
-        if (!Intelium.IS_ENABLED || !Intelium.IS_COMPATIBLE) return;
-        InteliumConfig cfg = InteliumConfigIO.get();
-        if (cfg.aggressiveCulling) {
-            OcclusionTuner.applyForCurrentFrame(Intelium.DETECTED_GENERATION);
+        try {
+            if (!Intelium.IS_ENABLED || !Intelium.IS_COMPATIBLE) return;
+            InteliumConfig cfg = InteliumConfigIO.get();
+            if (cfg.aggressiveCulling) {
+                OcclusionTuner.applyForCurrentFrame(Intelium.DETECTED_GENERATION);
+            }
+        } catch (Throwable t) {
+            Intelium.LOGGER.warn("Intelium occlusion tuning failed; skipping.", t);
         }
     }
 }

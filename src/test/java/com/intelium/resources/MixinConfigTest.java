@@ -188,6 +188,22 @@ class MixinConfigTest {
                 className + " must check IS_ENABLED && IS_COMPATIBLE");
     }
 
+    @Test
+    @DisplayName("MixinChunkBuilder hooks the real getThreadCount source, not a phantom ctor arg")
+    void chunkBuilderHooksThreadCount() throws IOException {
+        Path p = TestPaths.projectRoot()
+                .resolve("src/main/java/com/intelium/mixin/MixinChunkBuilder.java");
+        String src = Files.readString(p);
+        // Sodium 0.8's ChunkBuilder constructor takes (ClientWorld, ChunkVertexType) -
+        // there is NO int worker-count argument. The thread count comes from the
+        // static getThreadCount() method. A @ModifyVariable on the constructor would
+        // silently match nothing (the original, dead, behaviour).
+        assertTrue(src.contains("getThreadCount"),
+                "MixinChunkBuilder must hook ChunkBuilder.getThreadCount()");
+        assertFalse(src.contains("@ModifyVariable"),
+                "MixinChunkBuilder must not rely on a non-existent constructor int argument");
+    }
+
     private static java.util.List<String> clientList() {
         JsonArray a = mixins.getAsJsonArray("client");
         java.util.List<String> out = new java.util.ArrayList<>();
