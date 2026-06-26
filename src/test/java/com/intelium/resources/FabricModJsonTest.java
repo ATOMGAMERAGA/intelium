@@ -161,10 +161,12 @@ class FabricModJsonTest {
     }
 
     @Test
-    @DisplayName("depends.minecraft equals 1.21.11")
+    @DisplayName("depends.minecraft allows 1.21.11 within a 1.21.x range (not an exact pin)")
     void minecraftDep() {
         String v = json.getAsJsonObject("depends").get("minecraft").getAsString();
-        assertEquals("1.21.11", v);
+        assertTrue(v.contains("1.21.11"), "expected 1.21.11 in minecraft dep, was: " + v);
+        assertTrue(v.contains(">=") || v.contains("~") || v.contains("x") || v.contains("<"),
+                "minecraft dep should be a range, not an exact pin, was: " + v);
     }
 
     @Test
@@ -175,11 +177,11 @@ class FabricModJsonTest {
     }
 
     @Test
-    @DisplayName("depends.sodium range is >=0.8.0 <0.9.0")
+    @DisplayName("depends.sodium requires >=0.8.0 (config API baseline)")
     void sodiumDep() {
         String v = json.getAsJsonObject("depends").get("sodium").getAsString();
-        assertTrue(v.contains("0.8.0"));
-        assertTrue(v.contains("0.9.0"));
+        assertTrue(v.contains("0.8.0"), "expected 0.8.0 lower bound, was: " + v);
+        assertTrue(v.contains(">="), "expected a >= lower bound, was: " + v);
     }
 
     @Test
@@ -230,11 +232,13 @@ class FabricModJsonTest {
     }
 
     @Test
-    @DisplayName("depends.sodium upper bound is strict (<0.9.0)")
-    void sodiumStrictUpper() {
+    @DisplayName("depends.sodium has no artificial upper cap (works with any compatible Sodium)")
+    void sodiumNoUpperCap() {
         String v = json.getAsJsonObject("depends").get("sodium").getAsString();
-        assertTrue(v.matches(".*<\\s*0\\.9\\.0.*"),
-                "sodium upper bound must be strict (<0.9.0), was: " + v);
+        // Intelium tolerates internal differences via its mixin plugin, so it
+        // must not refuse newer Sodium releases with a hard upper bound.
+        assertFalse(v.contains("<"),
+                "sodium dependency must not cap the upper bound, was: " + v);
     }
 
     @Test

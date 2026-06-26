@@ -60,12 +60,6 @@ class MixinConfigTest {
     }
 
     @Test
-    @DisplayName("client mixins array contains MixinRenderSectionManager")
-    void hasRenderSectionManager() {
-        assertTrue(clientList().contains("MixinRenderSectionManager"));
-    }
-
-    @Test
     @DisplayName("client mixins array contains MixinSodiumWorldRenderer")
     void hasSodiumWorldRenderer() {
         assertTrue(clientList().contains("MixinSodiumWorldRenderer"));
@@ -78,21 +72,30 @@ class MixinConfigTest {
     }
 
     @Test
-    @DisplayName("client mixins array contains MixinDefaultChunkRenderer")
-    void hasDefaultChunkRenderer() {
-        assertTrue(clientList().contains("MixinDefaultChunkRenderer"));
+    @DisplayName("Placebo mixins were removed")
+    void noPlaceboMixins() {
+        assertFalse(clientList().contains("MixinDefaultChunkRenderer"));
+        assertFalse(clientList().contains("MixinRenderSectionManager"));
     }
 
     @Test
-    @DisplayName("client mixins array has exactly 4 entries")
-    void exactlyFourMixins() {
-        assertEquals(4, clientList().size());
+    @DisplayName("client mixins array has exactly 2 entries")
+    void exactlyTwoMixins() {
+        assertEquals(2, clientList().size());
     }
 
     @Test
-    @DisplayName("injectors.defaultRequire is 0 (don't crash on missing methods)")
+    @DisplayName("injectors.defaultRequire is 0 (soft - never crash on a shifted injection point)")
     void defaultRequireZero() {
         assertEquals(0, mixins.getAsJsonObject("injectors").get("defaultRequire").getAsInt());
+    }
+
+    @Test
+    @DisplayName("A mixin config plugin is declared for cross-version safety")
+    void hasPlugin() {
+        assertTrue(mixins.has("plugin"), "intelium.mixins.json must declare a plugin");
+        assertEquals("com.intelium.mixin.InteliumMixinPlugin",
+                mixins.get("plugin").getAsString());
     }
 
     @Test
@@ -105,10 +108,8 @@ class MixinConfigTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "MixinRenderSectionManager",
             "MixinSodiumWorldRenderer",
-            "MixinChunkBuilder",
-            "MixinDefaultChunkRenderer"
+            "MixinChunkBuilder"
     })
     @DisplayName("Each declared mixin class file exists on disk")
     void mixinFileExists(String className) {
@@ -120,10 +121,8 @@ class MixinConfigTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "MixinRenderSectionManager",
             "MixinSodiumWorldRenderer",
-            "MixinChunkBuilder",
-            "MixinDefaultChunkRenderer"
+            "MixinChunkBuilder"
     })
     @DisplayName("Each declared mixin file declares correct package")
     void mixinPackageCorrect(String className) throws IOException {
@@ -137,10 +136,8 @@ class MixinConfigTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "MixinRenderSectionManager",
             "MixinSodiumWorldRenderer",
-            "MixinChunkBuilder",
-            "MixinDefaultChunkRenderer"
+            "MixinChunkBuilder"
     })
     @DisplayName("Each mixin uses @Mixin annotation")
     void mixinHasAnnotation(String className) throws IOException {
@@ -153,10 +150,8 @@ class MixinConfigTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "MixinRenderSectionManager",
             "MixinSodiumWorldRenderer",
-            "MixinChunkBuilder",
-            "MixinDefaultChunkRenderer"
+            "MixinChunkBuilder"
     })
     @DisplayName("Each mixin sets remap = false (Sodium classes are not remapped)")
     void mixinRemapFalse(String className) throws IOException {
@@ -168,24 +163,14 @@ class MixinConfigTest {
                 className + " must include remap = false in its @Mixin annotation");
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {
-            "MixinRenderSectionManager",
-            "MixinSodiumWorldRenderer",
-            "MixinChunkBuilder",
-            "MixinDefaultChunkRenderer"
-    })
-    @DisplayName("Each mixin short-circuits when Intelium is disabled")
-    void mixinShortCircuits(String className) throws IOException {
+    @Test
+    @DisplayName("MixinChunkBuilder short-circuits when Intelium is disabled")
+    void chunkBuilderShortCircuits() throws IOException {
         Path p = TestPaths.projectRoot()
-                .resolve("src/main/java/com/intelium/mixin")
-                .resolve(className + ".java");
+                .resolve("src/main/java/com/intelium/mixin/MixinChunkBuilder.java");
         String src = Files.readString(p);
-        // SodiumWorldRenderer is the detection hook itself, it doesn't short-circuit;
-        // every other mixin must check IS_ENABLED and IS_COMPATIBLE.
-        if (className.equals("MixinSodiumWorldRenderer")) return;
         assertTrue(src.contains("IS_ENABLED") && src.contains("IS_COMPATIBLE"),
-                className + " must check IS_ENABLED && IS_COMPATIBLE");
+                "MixinChunkBuilder must check IS_ENABLED && IS_COMPATIBLE");
     }
 
     private static java.util.List<String> clientList() {

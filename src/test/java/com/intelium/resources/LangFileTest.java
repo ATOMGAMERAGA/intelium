@@ -66,24 +66,45 @@ class LangFileTest {
     @ValueSource(strings = {
             "intelium.options.title",
             "intelium.options.page.general",
-            "intelium.options.page.performance",
             "intelium.options.enable",
             "intelium.options.enable.tooltip",
-            "intelium.options.draw_call_batching",
-            "intelium.options.draw_call_batching.tooltip",
-            "intelium.options.persistent_buffers",
-            "intelium.options.persistent_buffers.tooltip",
             "intelium.options.chunk_workers",
             "intelium.options.chunk_workers.tooltip",
             "intelium.options.chunk_workers.auto",
-            "intelium.options.aggressive_culling",
-            "intelium.options.aggressive_culling.tooltip",
-            "intelium.options.disabled.reason",
+            "intelium.options.supported_gpus",
+            "intelium.options.supported_gpus.tooltip",
+            "intelium.options.overlay",
+            "intelium.options.overlay.tooltip",
+            "intelium.options.overlay_edit",
+            "intelium.options.overlay_edit.tooltip",
+            "intelium.hud.title",
+            "intelium.hud.fps",
+            "intelium.hud.on",
+            "intelium.hud.off",
+            "intelium.hud.gain",
+            "intelium.hud.running",
+            "intelium.hud.hint",
+            "intelium.hud.inactive",
+            "intelium.edit.title",
+            "intelium.edit.hint",
+            "intelium.edit.run",
+            "intelium.status.active",
+            "intelium.status.unsupported",
+            "intelium.status.pending",
+            "intelium.gpus.title",
+            "intelium.gpus.heading",
+            "intelium.gpus.detected",
+            "intelium.gpus.detected.pending",
+            "intelium.gpus.status.supported",
+            "intelium.gpus.status.unsupported",
+            "intelium.gpus.scroll",
             "intelium.disabled.nvidia",
             "intelium.disabled.amd",
             "intelium.disabled.unknown_gpu",
+            "intelium.disabled.unrecognized_intel",
             "intelium.disabled.too_old",
-            "intelium.disabled.sodium_missing"
+            "intelium.disabled.sodium_missing",
+            "intelium.disabled.incompatible_sodium"
     })
     @DisplayName("Required key exists in en_us.json")
     void enHasKey(String key) {
@@ -94,24 +115,45 @@ class LangFileTest {
     @ValueSource(strings = {
             "intelium.options.title",
             "intelium.options.page.general",
-            "intelium.options.page.performance",
             "intelium.options.enable",
             "intelium.options.enable.tooltip",
-            "intelium.options.draw_call_batching",
-            "intelium.options.draw_call_batching.tooltip",
-            "intelium.options.persistent_buffers",
-            "intelium.options.persistent_buffers.tooltip",
             "intelium.options.chunk_workers",
             "intelium.options.chunk_workers.tooltip",
             "intelium.options.chunk_workers.auto",
-            "intelium.options.aggressive_culling",
-            "intelium.options.aggressive_culling.tooltip",
-            "intelium.options.disabled.reason",
+            "intelium.options.supported_gpus",
+            "intelium.options.supported_gpus.tooltip",
+            "intelium.options.overlay",
+            "intelium.options.overlay.tooltip",
+            "intelium.options.overlay_edit",
+            "intelium.options.overlay_edit.tooltip",
+            "intelium.hud.title",
+            "intelium.hud.fps",
+            "intelium.hud.on",
+            "intelium.hud.off",
+            "intelium.hud.gain",
+            "intelium.hud.running",
+            "intelium.hud.hint",
+            "intelium.hud.inactive",
+            "intelium.edit.title",
+            "intelium.edit.hint",
+            "intelium.edit.run",
+            "intelium.status.active",
+            "intelium.status.unsupported",
+            "intelium.status.pending",
+            "intelium.gpus.title",
+            "intelium.gpus.heading",
+            "intelium.gpus.detected",
+            "intelium.gpus.detected.pending",
+            "intelium.gpus.status.supported",
+            "intelium.gpus.status.unsupported",
+            "intelium.gpus.scroll",
             "intelium.disabled.nvidia",
             "intelium.disabled.amd",
             "intelium.disabled.unknown_gpu",
+            "intelium.disabled.unrecognized_intel",
             "intelium.disabled.too_old",
-            "intelium.disabled.sodium_missing"
+            "intelium.disabled.sodium_missing",
+            "intelium.disabled.incompatible_sodium"
     })
     @DisplayName("Required key exists in tr_tr.json")
     void trHasKey(String key) {
@@ -219,10 +261,11 @@ class LangFileTest {
     }
 
     @Test
-    @DisplayName("intelium.options.disabled.reason contains %s placeholder in both languages")
-    void disabledReasonHasPlaceholder() {
-        assertTrue(en.get("intelium.options.disabled.reason").getAsString().contains("%s"));
-        assertTrue(tr.get("intelium.options.disabled.reason").getAsString().contains("%s"));
+    @DisplayName("intelium.status.unsupported contains two %s placeholders in both languages")
+    void unsupportedStatusHasPlaceholders() {
+        assertTrue(en.get("intelium.status.unsupported").getAsString().contains("%s"));
+        assertTrue(tr.get("intelium.status.unsupported").getAsString().contains("%s"));
+        assertTrue(en.get("intelium.gpus.detected").getAsString().contains("%s"));
     }
 
     private static <T> Set<T> diff(Set<T> a, Set<T> b) {

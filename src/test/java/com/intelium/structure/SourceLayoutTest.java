@@ -27,7 +27,8 @@ class SourceLayoutTest {
     @ValueSource(strings = {
             "Intelium.java",
             "IntelGpuDetector.java",
-            "IntelGpuGeneration.java"
+            "IntelGpuGeneration.java",
+            "SupportedGpus.java"
     })
     @DisplayName("Top-level source file exists")
     void topLevelSourcePresent(String name) {
@@ -38,10 +39,9 @@ class SourceLayoutTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "InteliumConfig.java",
-            "InteliumConfigIO.java",
-            "InteliumConfigEntryPoint.java"
+            "InteliumConfigIO.java"
     })
-    @DisplayName("Config source file exists")
+    @DisplayName("Config source file exists (common)")
     void configSourcePresent(String name) {
         Path p = TestPaths.projectRoot()
                 .resolve("src/main/java/com/intelium/config").resolve(name);
@@ -50,10 +50,19 @@ class SourceLayoutTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "ChunkBuilderTuner.java",
-            "DrawCallBatcher.java",
-            "BufferStrategy.java",
-            "OcclusionTuner.java"
+            "config/InteliumConfigEntryPoint.java",
+            "gui/SupportedGpusScreen.java"
+    })
+    @DisplayName("Client-only source file exists in the client source set")
+    void clientSourcePresent(String name) {
+        Path p = TestPaths.projectRoot()
+                .resolve("src/client/java/com/intelium").resolve(name);
+        assertTrue(Files.exists(p), "missing client source file: " + p);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ChunkBuilderTuner.java"
     })
     @DisplayName("Optimization source file exists")
     void optimizationSourcePresent(String name) {
@@ -64,10 +73,8 @@ class SourceLayoutTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "MixinRenderSectionManager.java",
             "MixinSodiumWorldRenderer.java",
-            "MixinChunkBuilder.java",
-            "MixinDefaultChunkRenderer.java"
+            "MixinChunkBuilder.java"
     })
     @DisplayName("Mixin source file exists")
     void mixinSourcePresent(String name) {

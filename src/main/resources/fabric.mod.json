@@ -8,16 +8,17 @@
         "Intelium Contributors"
     ],
     "contact": {
-        "homepage": "https://github.com/atomgameraga/intelium",
-        "sources": "https://github.com/atomgameraga/intelium",
-        "issues": "https://github.com/atomgameraga/intelium/issues"
+        "homepage": "https://github.com/ATOMGAMERAGA/intelium",
+        "sources": "https://github.com/ATOMGAMERAGA/intelium",
+        "issues": "https://github.com/ATOMGAMERAGA/intelium/issues"
     },
     "license": "GPL-3.0-only",
     "icon": "assets/intelium/icon.png",
     "environment": "client",
     "entrypoints": {
         "client": [
-            "com.intelium.Intelium"
+            "com.intelium.Intelium",
+            "com.intelium.client.InteliumClientInit"
         ],
         "sodium:config_api_user": [
             "com.intelium.config.InteliumConfigEntryPoint"
@@ -32,8 +33,8 @@
     "depends": {
         "fabricloader": ">=0.18.0",
         "fabric-api": "*",
-        "minecraft": "1.21.11",
+        "minecraft": ">=1.21.11 <1.22",
         "java": ">=21",
-        "sodium": ">=0.8.0 <0.9.0"
+        "sodium": ">=0.8.0"
     }
 }

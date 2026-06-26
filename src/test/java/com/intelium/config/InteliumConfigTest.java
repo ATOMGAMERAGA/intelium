@@ -15,33 +15,18 @@ class InteliumConfigTest {
     }
 
     @Test
-    @DisplayName("Default drawCallBatching is true")
-    void defaultDrawCallBatching() {
-        assertTrue(new InteliumConfig().drawCallBatching);
-    }
-
-    @Test
-    @DisplayName("Default persistentBuffers is true")
-    void defaultPersistentBuffers() {
-        assertTrue(new InteliumConfig().persistentBuffers);
-    }
-
-    @Test
-    @DisplayName("Default chunkBuildWorkers is -1 (auto)")
+    @DisplayName("Default chunkBuildWorkers is 0 (auto)")
     void defaultChunkBuildWorkers() {
-        assertEquals(-1, new InteliumConfig().chunkBuildWorkers);
+        assertEquals(0, new InteliumConfig().chunkBuildWorkers);
     }
 
     @Test
-    @DisplayName("Default aggressiveCulling is true")
-    void defaultAggressiveCulling() {
-        assertTrue(new InteliumConfig().aggressiveCulling);
-    }
-
-    @Test
-    @DisplayName("Default indirectBufferBytes is 0 (let Sodium decide)")
-    void defaultIndirectBufferBytes() {
-        assertEquals(0, new InteliumConfig().indirectBufferBytes);
+    @DisplayName("Overlay defaults: disabled, positioned near top-left")
+    void overlayDefaults() {
+        InteliumConfig c = new InteliumConfig();
+        assertFalse(c.overlayEnabled);
+        assertEquals(4, c.overlayX);
+        assertEquals(4, c.overlayY);
     }
 
     @Test
@@ -50,20 +35,13 @@ class InteliumConfigTest {
         InteliumConfig a = new InteliumConfig();
         InteliumConfig b = new InteliumConfig();
         assertEquals(a.enabled, b.enabled);
-        assertEquals(a.drawCallBatching, b.drawCallBatching);
-        assertEquals(a.persistentBuffers, b.persistentBuffers);
         assertEquals(a.chunkBuildWorkers, b.chunkBuildWorkers);
-        assertEquals(a.aggressiveCulling, b.aggressiveCulling);
-        assertEquals(a.indirectBufferBytes, b.indirectBufferBytes);
     }
 
     @Test
     @DisplayName("Fields are public for GSON access")
     void fieldsArePublic() throws NoSuchFieldException {
-        for (String name : new String[]{
-                "enabled", "drawCallBatching", "persistentBuffers",
-                "chunkBuildWorkers", "aggressiveCulling", "indirectBufferBytes"
-        }) {
+        for (String name : new String[]{"enabled", "chunkBuildWorkers"}) {
             var f = InteliumConfig.class.getDeclaredField(name);
             assertTrue(java.lang.reflect.Modifier.isPublic(f.getModifiers()),
                     name + " should be public for GSON");
@@ -87,14 +65,6 @@ class InteliumConfigTest {
     }
 
     @Test
-    @DisplayName("Mutability: indirectBufferBytes accepts large values")
-    void mutableLargeBuffer() {
-        InteliumConfig c = new InteliumConfig();
-        c.indirectBufferBytes = 16 * 1024 * 1024;
-        assertEquals(16 * 1024 * 1024, c.indirectBufferBytes);
-    }
-
-    @Test
     @DisplayName("Class has public no-arg constructor (for GSON)")
     void hasNoArgCtor() throws NoSuchMethodException {
         var ctor = InteliumConfig.class.getDeclaredConstructor();
@@ -102,7 +72,7 @@ class InteliumConfigTest {
     }
 
     @Test
-    @DisplayName("Field count is 6")
+    @DisplayName("Five public instance fields: enabled, workers, overlay x3 (no placebo toggles)")
     void fieldCount() {
         int publicFields = 0;
         for (var f : InteliumConfig.class.getDeclaredFields()) {
@@ -111,6 +81,6 @@ class InteliumConfigTest {
                 publicFields++;
             }
         }
-        assertEquals(6, publicFields);
+        assertEquals(5, publicFields);
     }
 }
