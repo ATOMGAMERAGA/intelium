@@ -85,9 +85,17 @@ class MixinConfigTest {
     }
 
     @Test
-    @DisplayName("injectors.defaultRequire is 1 (targets are verified; fail loudly if absent)")
-    void defaultRequireOne() {
-        assertEquals(1, mixins.getAsJsonObject("injectors").get("defaultRequire").getAsInt());
+    @DisplayName("injectors.defaultRequire is 0 (soft - never crash on a shifted injection point)")
+    void defaultRequireZero() {
+        assertEquals(0, mixins.getAsJsonObject("injectors").get("defaultRequire").getAsInt());
+    }
+
+    @Test
+    @DisplayName("A mixin config plugin is declared for cross-version safety")
+    void hasPlugin() {
+        assertTrue(mixins.has("plugin"), "intelium.mixins.json must declare a plugin");
+        assertEquals("com.intelium.mixin.InteliumMixinPlugin",
+                mixins.get("plugin").getAsString());
     }
 
     @Test

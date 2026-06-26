@@ -2,7 +2,6 @@ package com.intelium;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
-import net.fabricmc.loader.api.ModContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,19 +9,24 @@ public class Intelium implements ClientModInitializer {
     public static final String MOD_ID = "intelium";
     public static final Logger LOGGER = LoggerFactory.getLogger("Intelium");
 
-    /** Sodium major.minor series Intelium is built and tested against. */
-    static final String SUPPORTED_SODIUM_SERIES = "0.8.";
-
     public static volatile boolean IS_ENABLED = true;
 
     public static volatile boolean IS_COMPATIBLE = false;
 
     /**
-     * True once Sodium is confirmed present and on a supported version. GPU
-     * detection only runs (and may flip {@link #IS_COMPATIBLE} on) when this is
-     * true, so a Sodium-missing / unsupported-Sodium decision is never clobbered.
+     * True once Sodium is confirmed present. GPU detection only runs (and may
+     * flip {@link #IS_COMPATIBLE} on) when this is true, so a Sodium-missing
+     * decision is never clobbered.
      */
     public static volatile boolean SODIUM_OK = false;
+
+    /**
+     * Whether the chunk-worker tuning hook could be applied to the running
+     * Sodium build (set by {@link com.intelium.mixin.InteliumMixinPlugin}). When
+     * false, the feature self-disabled because this Sodium version's internals
+     * differ - everything else still works.
+     */
+    public static volatile boolean WORKER_TUNING_AVAILABLE = false;
 
     public static volatile IntelGpuGeneration DETECTED_GENERATION = IntelGpuGeneration.UNKNOWN;
 
@@ -44,29 +48,18 @@ public class Intelium implements ClientModInitializer {
             return;
         }
 
-        if (!isSupportedSodium()) {
-            IS_COMPATIBLE = false;
-            DISABLED_REASON_KEY = "intelium.disabled.incompatible_sodium";
-            LOGGER.error("Intelium {}: unsupported Sodium build '{}' (need {}x). "
-                            + "Intelium disabled cleanly; Sodium runs unmodified.",
-                    version, sodiumVersion(), SUPPORTED_SODIUM_SERIES);
-            return;
-        }
-
+        // Intelium supports any Sodium that satisfies the fabric.mod.json
+        // dependency range. Internal differences between Sodium versions are
+        // handled gracefully by InteliumMixinPlugin (hooks self-disable, never
+        // crash), so there is no hard version gate here.
         SODIUM_OK = true;
-        LOGGER.info("Intelium {}: sodium {} OK. GPU detection deferred until the "
+        LOGGER.info("Intelium {}: sodium {} detected. GPU detection deferred until the "
                 + "GL context is ready.", version, sodiumVersion());
-    }
-
-    private static boolean isSupportedSodium() {
-        String v = sodiumVersion();
-        return v != null && v.startsWith(SUPPORTED_SODIUM_SERIES);
     }
 
     private static String sodiumVersion() {
         return FabricLoader.getInstance().getModContainer("sodium")
-                .map(ModContainer::getMetadata)
-                .map(m -> m.getVersion().getFriendlyString())
-                .orElse(null);
+                .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                .orElse("unknown");
     }
 }

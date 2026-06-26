@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = SodiumWorldRenderer.class, remap = false)
 public abstract class MixinSodiumWorldRenderer {
 
-    @Inject(method = "<init>", at = @At("RETURN"), require = 1)
+    @Inject(method = "<init>", at = @At("RETURN"), require = 0)
     private void intelium$detectGpu(CallbackInfo ci) {
         try {
             IntelGpuDetector.detectOnce();

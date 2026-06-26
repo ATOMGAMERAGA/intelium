@@ -31,7 +31,7 @@ in `src/main/resources/assets/intelium/icon.png`.
 |---|---|
 | Chunk build threading | Overrides Sodium's chunk-build worker count with a generation-aware value (lower on weak iGPUs, higher on Iris Xe / Arc). Honors a manual override. |
 | GPU detection | Identifies the exact Intel generation from the GL renderer string on both Windows drivers and Linux/Mesa, and reports support status in-game and in the log. |
-| Honest gating | Disables itself cleanly on NVIDIA / AMD / unrecognized / too-old GPUs and on unsupported Sodium builds — Sodium then runs unmodified. |
+| Honest gating | Disables itself cleanly on NVIDIA / AMD / unrecognized / too-old GPUs. A Mixin config plugin checks each hook's Sodium target at load time, so any compatible Sodium version works and incompatible internals self-disable instead of crashing. |
 
 > **Why no draw-call batching / persistent buffers / occlusion culling?**
 > Sodium 0.8 already issues batched `glMultiDrawElementsIndirect` draws, manages
@@ -49,7 +49,10 @@ settings and on the in-game **Supported GPUs** screen.
 - Minecraft **1.21.11**
 - Fabric Loader **0.18.3+**
 - Fabric API
-- **Sodium 0.8.x** (`>=0.8.0 <0.9.0`)
+- **Sodium 0.8.0 or newer** — any version compatible with your Minecraft. Intelium
+  does not cap the Sodium version: if a newer Sodium changes the internals a hook
+  relies on, that hook self-disables cleanly (no crash) and everything else keeps
+  working.
 - Java 21
 - An Intel GPU (HD 520 / Gen 9 Skylake or newer)
 

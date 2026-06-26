@@ -44,6 +44,17 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
 
     @Override
     public void registerConfigLate(ConfigBuilder builder) {
+        try {
+            buildPage(builder);
+        } catch (Throwable t) {
+            // A future Sodium could change the config API. Fail soft: skip our
+            // page rather than crash Sodium's settings screen.
+            Intelium.LOGGER.warn("Intelium: could not register its Sodium config page on this "
+                    + "Sodium build; page omitted. Optimizations still work.", t);
+        }
+    }
+
+    private void buildPage(ConfigBuilder builder) {
         InteliumConfig cfg = InteliumConfigIO.get();
 
         builder.registerOwnModOptions()
@@ -68,7 +79,8 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                                                 ? Text.translatable("intelium.options.chunk_workers.auto")
                                                 : Text.literal(Integer.toString(value)))
                                         .setStorageHandler(saveHook)
-                                        .setEnabledProvider(state -> Intelium.IS_COMPATIBLE)
+                                        .setEnabledProvider(state ->
+                                                Intelium.IS_COMPATIBLE && Intelium.WORKER_TUNING_AVAILABLE)
                                         .setBinding(v -> cfg.chunkBuildWorkers = v,
                                                     () -> Math.max(0, cfg.chunkBuildWorkers))
                                         .setDefaultValue(0)

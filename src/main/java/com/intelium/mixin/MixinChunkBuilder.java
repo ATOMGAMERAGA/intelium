@@ -23,7 +23,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(value = ChunkBuilder.class, remap = false)
 public abstract class MixinChunkBuilder {
 
-    @Inject(method = "getThreadCount", at = @At("HEAD"), cancellable = true, require = 1)
+    // require = 0: if a Sodium build shifts this injection point, the hook
+    // no-ops instead of crashing. InteliumMixinPlugin already gates whether the
+    // target method exists at all.
+    @Inject(method = "getThreadCount", at = @At("HEAD"), cancellable = true, require = 0)
     private static void intelium$tuneWorkerCount(CallbackInfoReturnable<Integer> cir) {
         if (!Intelium.IS_ENABLED || !Intelium.IS_COMPATIBLE) return;
         int desired = InteliumConfigIO.get().chunkBuildWorkers;
