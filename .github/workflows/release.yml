@@ -131,18 +131,15 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Generate random release version
+      - name: Resolve release version
         id: version
         run: |
-          BASE="1.0.0"
-          DATE=$(date -u +%Y%m%d)
-          TIME=$(date -u +%H%M%S)
-          RAND=$(openssl rand -hex 4)
-          GIT_SHA=$(git rev-parse --short=8 HEAD)
-          VERSION="${BASE}-build.${DATE}.${TIME}+${RAND}.${GIT_SHA}"
+          # Fixed, human-readable release version. The published mod reports
+          # exactly "1.0.0" and the GitHub release is tagged "v1.0.0".
+          VERSION="1.0.0"
           TAG="v${VERSION}"
-          echo "Generated version: $VERSION"
-          echo "Generated tag:     $TAG"
+          echo "Release version: $VERSION"
+          echo "Release tag:     $TAG"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "INTELIUM_VERSION=$VERSION" >> "$GITHUB_ENV"
@@ -350,7 +347,7 @@ jobs:
           body: |
             ## Intelium ${{ steps.version.outputs.version }}
 
-            **Random build version.** Generated automatically by the release workflow.
+            First stable release. Built, tested, and signed automatically by the release workflow.
 
             ### Verification
             The jar is signed two ways for trust:
@@ -409,6 +406,6 @@ jobs:
             build/libs/runtimeClasspath.txt
             build/libs/compileClasspath.txt
           draft: false
-          prerelease: true
+          prerelease: false
           generate_release_notes: false
           fail_on_unmatched_files: false

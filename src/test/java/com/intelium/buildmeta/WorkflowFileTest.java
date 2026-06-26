@@ -61,12 +61,15 @@ class WorkflowFileTest {
     }
 
     @Test
-    @DisplayName("Workflow generates a random version")
-    void hasRandomVersion() {
-        assertTrue(content.contains("openssl rand")
-                        || content.contains("RANDOM")
-                        || content.contains("uuidgen"),
-                "must generate random version component");
+    @DisplayName("Workflow publishes the fixed 1.0.0 release")
+    void usesFixedVersion() {
+        assertTrue(content.contains("VERSION=\"1.0.0\""),
+                "release version must be the fixed 1.0.0");
+        assertTrue(content.contains("TAG=\"v${VERSION}\"")
+                        || content.contains("v1.0.0"),
+                "release must be tagged v1.0.0");
+        assertTrue(content.contains("prerelease: false"),
+                "1.0.0 must be a full release, not a prerelease");
     }
 
     @Test

@@ -1,10 +1,13 @@
 package com.intelium.mixin;
 
 import com.intelium.Intelium;
+import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.MethodNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
+import java.io.InputStream;
 import java.util.List;
 import java.util.Set;
 
@@ -56,25 +59,52 @@ public class InteliumMixinPlugin implements IMixinConfigPlugin {
         return true;
     }
 
+    /**
+     * Reports whether a class is present <em>without loading it</em>.
+     *
+     * <p>We deliberately do NOT use {@code Class.forName}: forcing a Sodium
+     * class to load here - during mixin-config preparation, before the DEFAULT
+     * mixin phase - <em>defines</em> it in the class loader too early. Other
+     * mods' mixins that target the same class (notably Iris's
+     * {@code mixins.iris.compat.sodium.json:MixinSodiumWorldRenderer}) then fail
+     * to apply with {@code MixinTargetAlreadyLoadedException}, crashing the game
+     * on startup. Looking the class file up as a classpath resource answers the
+     * "does it exist?" question without ever loading the class.
+     */
     private static boolean classExists(String name) {
-        try {
-            Class.forName(name, false, InteliumMixinPlugin.class.getClassLoader());
-            return true;
-        } catch (Throwable t) {
-            return false;
-        }
+        return InteliumMixinPlugin.class.getClassLoader()
+                .getResource(resourcePath(name)) != null;
     }
 
+    /**
+     * Reports whether {@code className} declares a method named
+     * {@code methodName}, by parsing the class bytes with ASM rather than
+     * loading the class (see {@link #classExists(String)} for why loading is
+     * unsafe here).
+     */
     private static boolean methodExists(String className, String methodName) {
-        try {
-            Class<?> c = Class.forName(className, false, InteliumMixinPlugin.class.getClassLoader());
-            for (var m : c.getDeclaredMethods()) {
-                if (m.getName().equals(methodName)) return true;
+        try (InputStream in = classResourceStream(className)) {
+            if (in == null) return false;
+            ClassNode node = new ClassNode();
+            new ClassReader(in).accept(node,
+                    ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+            if (node.methods == null) return false;
+            for (MethodNode m : node.methods) {
+                if (m.name.equals(methodName)) return true;
             }
             return false;
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    private static String resourcePath(String binaryName) {
+        return binaryName.replace('.', '/') + ".class";
+    }
+
+    private static InputStream classResourceStream(String binaryName) {
+        return InteliumMixinPlugin.class.getClassLoader()
+                .getResourceAsStream(resourcePath(binaryName));
     }
 
     @Override
