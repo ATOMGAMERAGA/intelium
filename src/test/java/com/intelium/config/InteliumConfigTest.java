@@ -21,6 +21,15 @@ class InteliumConfigTest {
     }
 
     @Test
+    @DisplayName("Overlay defaults: disabled, positioned near top-left")
+    void overlayDefaults() {
+        InteliumConfig c = new InteliumConfig();
+        assertFalse(c.overlayEnabled);
+        assertEquals(4, c.overlayX);
+        assertEquals(4, c.overlayY);
+    }
+
+    @Test
     @DisplayName("Two fresh configs are equal by field")
     void freshConfigsEqualByField() {
         InteliumConfig a = new InteliumConfig();
@@ -63,7 +72,7 @@ class InteliumConfigTest {
     }
 
     @Test
-    @DisplayName("Only two public instance fields remain (no placebo toggles)")
+    @DisplayName("Five public instance fields: enabled, workers, overlay x3 (no placebo toggles)")
     void fieldCount() {
         int publicFields = 0;
         for (var f : InteliumConfig.class.getDeclaredFields()) {
@@ -72,6 +81,6 @@ class InteliumConfigTest {
                 publicFields++;
             }
         }
-        assertEquals(2, publicFields);
+        assertEquals(5, publicFields);
     }
 }

@@ -91,11 +91,28 @@ Settings are exposed inside Sodium's Video Settings screen under an
 |---|---|---|
 | Enable Intelium | `true` | Master switch. Greyed out when the GPU is unsupported. |
 | Chunk Build Workers | `Auto` | `0` / Auto = generation-aware default; `1–16` overrides Sodium's worker count directly. |
+| FPS Test Overlay | `false` | Toggles the movable on-screen FPS panel. |
+| Edit Overlay / Benchmark | button | Opens edit mode (drag to reposition) and runs the A/B benchmark. |
 | Supported GPUs | button | Opens an in-game list of supported generations and your detected GPU's status. |
 
-When the detected GPU (or Sodium build) is unsupported, every interactive
-option is greyed out and the reason is shown in the option tooltips and on the
-Supported GPUs screen.
+Changes apply live: toggling Intelium or changing the worker count rebuilds the
+chunk renderer immediately, so you see the effect without restarting. When the
+detected GPU (or Sodium build) is unsupported, every interactive option is
+greyed out and the reason is shown in the option tooltips and on the Supported
+GPUs screen.
+
+### FPS test overlay
+
+Enable **FPS Test Overlay** to show a movable panel with your live FPS. Open
+**Edit Overlay / Benchmark** to:
+
+- **Drag** the panel anywhere on screen (position saves automatically).
+- **Run A/B Benchmark** — Intelium measures average FPS with its effect *on*,
+  then toggles it *off* (rebuilding chunks between windows) and measures again,
+  and reports both figures plus the gain. This is a real, measured comparison —
+  not an estimate. Because Intelium's effect is chunk-build threading, the gain
+  shows up most while terrain is loading; on a fully-built static scene the
+  delta can legitimately be near zero.
 
 ## Building
 

@@ -1,6 +1,8 @@
 package com.intelium.config;
 
 import com.intelium.Intelium;
+import com.intelium.client.InteliumGame;
+import com.intelium.client.hud.OverlayEditScreen;
 import com.intelium.gui.SupportedGpusScreen;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.StorageEventHandler;
@@ -69,6 +71,9 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                                         .setEnabledProvider(state -> Intelium.IS_COMPATIBLE)
                                         .setBinding(v -> { cfg.enabled = v; Intelium.IS_ENABLED = v; },
                                                     () -> cfg.enabled)
+                                        // Apply live: rebuild chunks so the new
+                                        // worker count takes effect immediately.
+                                        .setApplyHook(state -> InteliumGame.reloadChunks())
                                         .setDefaultValue(true)
                                 )
                                 .addOption(builder.createIntegerOption(id("chunk_workers"))
@@ -83,7 +88,24 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                                                 Intelium.IS_COMPATIBLE && Intelium.WORKER_TUNING_AVAILABLE)
                                         .setBinding(v -> cfg.chunkBuildWorkers = v,
                                                     () -> Math.max(0, cfg.chunkBuildWorkers))
+                                        // Apply live: rebuild chunks so the new
+                                        // worker count takes effect immediately.
+                                        .setApplyHook(state -> InteliumGame.reloadChunks())
                                         .setDefaultValue(0)
+                                )
+                                .addOption(builder.createBooleanOption(id("overlay"))
+                                        .setName(Text.translatable("intelium.options.overlay"))
+                                        .setTooltip(Text.translatable("intelium.options.overlay.tooltip"))
+                                        .setStorageHandler(saveHook)
+                                        .setBinding(v -> cfg.overlayEnabled = v, () -> cfg.overlayEnabled)
+                                        .setDefaultValue(false)
+                                )
+                                .addOption(builder.createExternalButtonOption(id("overlay_edit"))
+                                        .setName(Text.translatable("intelium.options.overlay_edit"))
+                                        .setTooltip(Text.translatable("intelium.options.overlay_edit.tooltip"))
+                                        .setScreenConsumer(parent ->
+                                                MinecraftClient.getInstance()
+                                                        .setScreen(new OverlayEditScreen(parent)))
                                 )
                                 .addOption(builder.createExternalButtonOption(id("supported_gpus"))
                                         .setName(Text.translatable("intelium.options.supported_gpus"))

@@ -43,19 +43,26 @@ class ConfigRoundtripTest {
         InteliumConfig original = new InteliumConfig();
         original.enabled = false;
         original.chunkBuildWorkers = 4;
+        original.overlayEnabled = true;
+        original.overlayX = 120;
+        original.overlayY = 48;
 
         String json = GSON.toJson(original);
         InteliumConfig parsed = GSON.fromJson(json, InteliumConfig.class);
 
         assertFalse(parsed.enabled);
         assertEquals(4, parsed.chunkBuildWorkers);
+        assertTrue(parsed.overlayEnabled);
+        assertEquals(120, parsed.overlayX);
+        assertEquals(48, parsed.overlayY);
     }
 
     @Test
     @DisplayName("Serialized JSON contains all field names")
     void serializedContainsAllKeys() {
         String json = GSON.toJson(new InteliumConfig());
-        for (String key : new String[]{"enabled", "chunkBuildWorkers"}) {
+        for (String key : new String[]{
+                "enabled", "chunkBuildWorkers", "overlayEnabled", "overlayX", "overlayY"}) {
             assertTrue(json.contains(key), "missing key: " + key);
         }
     }

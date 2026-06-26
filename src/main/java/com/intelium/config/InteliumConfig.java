@@ -11,4 +11,11 @@ public class InteliumConfig {
      * overrides Sodium's own thread count directly.
      */
     public int chunkBuildWorkers = 0;
+
+    /** Whether the movable on-screen FPS test overlay is shown. */
+    public boolean overlayEnabled = false;
+
+    /** Overlay top-left position, in scaled GUI pixels. Set by drag/edit mode. */
+    public int overlayX = 4;
+    public int overlayY = 4;
 }
