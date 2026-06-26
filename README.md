@@ -4,9 +4,11 @@
 
 # Intelium
 
-**Intelium** is a Fabric mod that optimizes Sodium's rendering backend for
-Intel GPUs. It is the Intel counterpart to Nvidium (which targets NVIDIA
-GeForce cards) and stays out of the way on systems where it does not apply.
+**Intelium** is a Fabric mod that tunes Sodium for Intel GPUs and gives you
+clear, in-game visibility into whether your GPU is supported. It applies a
+generation-aware chunk-build worker count and otherwise stays out of Sodium's
+way. On NVIDIA, AMD, unrecognized, or too-old Intel GPUs it disables itself
+cleanly and Sodium runs unmodified.
 
 ## Branding assets
 
@@ -25,16 +27,22 @@ in `src/main/resources/assets/intelium/icon.png`.
 
 ## What it does
 
-| Area | Optimization |
+| Area | What Intelium does |
 |---|---|
-| Draw-call submission | Coalesces small `glDrawElementsIndirect` calls into batched MDI submissions to reduce Intel driver overhead |
-| Chunk build threading | Tunes the number of chunk build worker threads against the shared CPU/iGPU TDP |
-| Buffer strategy | Uses persistent mapped buffers (`GL_ARB_buffer_storage`) instead of orphan-and-respec |
-| Occlusion culling | Tightens visibility tests on weaker iGPUs to feed the GPU fewer, larger batches |
+| Chunk build threading | Overrides Sodium's chunk-build worker count with a generation-aware value (lower on weak iGPUs, higher on Iris Xe / Arc). Honors a manual override. |
+| GPU detection | Identifies the exact Intel generation from the GL renderer string on both Windows drivers and Linux/Mesa, and reports support status in-game and in the log. |
+| Honest gating | Disables itself cleanly on NVIDIA / AMD / unrecognized / too-old GPUs and on unsupported Sodium builds — Sodium then runs unmodified. |
 
-Intelium auto-disables on NVIDIA, AMD, or unknown GPUs, and on Intel parts
-older than HD Graphics 520 (Gen 9 / Skylake, 2015). On those systems Sodium
-runs unmodified.
+> **Why no draw-call batching / persistent buffers / occlusion culling?**
+> Sodium 0.8 already issues batched `glMultiDrawElementsIndirect` draws, manages
+> chunk geometry in a GPU memory arena, and performs occlusion culling.
+> Re-implementing those on top of Sodium is redundant and risks regressions or
+> crashes, so Intelium does not ship placebo switches for them.
+
+Intelium auto-disables on NVIDIA, AMD, unrecognized, or unknown GPUs, and on
+Intel parts older than HD Graphics 520 (Gen 9 / Skylake, 2015). When disabled,
+its options are greyed out and the reason is shown both in Sodium's video
+settings and on the in-game **Supported GPUs** screen.
 
 ## Requirements
 
@@ -47,14 +55,28 @@ runs unmodified.
 
 ## Supported Intel generations
 
-| Generation | Examples |
-|---|---|
-| Gen 9 Skylake | HD Graphics 520, 530 |
-| Gen 9.5 Kaby/Coffee Lake | UHD Graphics 620, 630 |
-| Gen 11 Ice Lake | Iris Plus G7 |
-| Xe-LP / Gen 12 Tiger Lake | Iris Xe |
-| Xe-HPG Arc Alchemist | Arc A310 - A770 |
-| Xe2 Lunar / Battlemage | Arc B-series |
+The support cutoff is **Gen 9 "Skylake" (HD Graphics 520 and its
+generation-mates)**. Everything from Skylake onward is supported; Broadwell
+(2014) and older are recognized but reported unsupported. The same list is
+shown in-game via the **Supported GPUs** button on Intelium's settings page,
+ordered oldest to newest.
+
+| Generation | Architecture | Years | Examples |
+|---|---|---|---|
+| Gen 9 Skylake | Gen 9 | 2015 | HD Graphics 510, 515, 520, 530 · Iris Graphics 540, 550 · Iris Pro 580 |
+| Gen 9.5 Kaby / Coffee / Comet Lake | Gen 9.5 | 2016–2020 | HD / UHD Graphics 610, 620, 630 |
+| Gen 11 Ice Lake | Gen 11 | 2019 | Iris Plus Graphics G4, G7 |
+| Xe-LP | Gen 12 | 2020–2023 | Iris Xe Graphics (Tiger / Alder Lake) · UHD Graphics 710, 730, 750, 770 · Iris Xe MAX (DG1) |
+| Arc Alchemist | Xe-HPG | 2022 | Arc A310, A380, A580, A750, A770 · mobile A350M–A770M · Pro A30M–A60 |
+| Core Ultra integrated Arc | Xe-LPG / Xe2-LPG | 2023–2024 | Intel Arc Graphics (Meteor Lake, Lunar Lake) |
+| Arc Battlemage | Xe2-HPG | 2024–2026 | Arc B570, B580, B770 |
+
+### Not supported (Broadwell and older)
+
+Recognized but disabled — Sodium runs unmodified: original Intel HD Graphics
+(Ironlake/Westmere), HD Graphics 2000/3000 (Sandy Bridge), HD 2500/4000 (Ivy
+Bridge), HD 4200–5000 / Iris 5100 / Iris Pro 5200 (Haswell), and HD
+5300/5500/6000 / Iris 6100 / Iris Pro 6200 (Broadwell).
 
 ## Configuration
 
@@ -64,11 +86,13 @@ Settings are exposed inside Sodium's Video Settings screen under an
 
 | Option | Default | Notes |
 |---|---|---|
-| Enable Intelium | `true` | Master switch |
-| Draw Call Batching | `true` | Biggest win on Gen 9-12 |
-| Persistent Mapped Buffers | `true` | Requires `GL_ARB_buffer_storage` |
-| Aggressive Occlusion Culling | `true` | Trades CPU work for fewer vertices |
-| Chunk Build Workers | `auto` | `-1` = generation-aware default |
+| Enable Intelium | `true` | Master switch. Greyed out when the GPU is unsupported. |
+| Chunk Build Workers | `Auto` | `0` / Auto = generation-aware default; `1–16` overrides Sodium's worker count directly. |
+| Supported GPUs | button | Opens an in-game list of supported generations and your detected GPU's status. |
+
+When the detected GPU (or Sodium build) is unsupported, every interactive
+option is greyed out and the reason is shown in the option tooltips and on the
+Supported GPUs screen.
 
 ## Building
 
@@ -80,4 +104,4 @@ The mod jar lands in `build/libs/intelium-<version>.jar`.
 
 ## License
 
-LGPL-3.0-only. See `LICENSE`.
+GPL-3.0-only. See `LICENSE`.

@@ -161,10 +161,12 @@ class FabricModJsonTest {
     }
 
     @Test
-    @DisplayName("depends.minecraft equals 1.21.11")
+    @DisplayName("depends.minecraft allows 1.21.11 within a 1.21.x range (not an exact pin)")
     void minecraftDep() {
         String v = json.getAsJsonObject("depends").get("minecraft").getAsString();
-        assertEquals("1.21.11", v);
+        assertTrue(v.contains("1.21.11"), "expected 1.21.11 in minecraft dep, was: " + v);
+        assertTrue(v.contains(">=") || v.contains("~") || v.contains("x") || v.contains("<"),
+                "minecraft dep should be a range, not an exact pin, was: " + v);
     }
 
     @Test

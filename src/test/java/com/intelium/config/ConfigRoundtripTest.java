@@ -34,11 +34,7 @@ class ConfigRoundtripTest {
         String json = GSON.toJson(original);
         InteliumConfig parsed = GSON.fromJson(json, InteliumConfig.class);
         assertEquals(original.enabled, parsed.enabled);
-        assertEquals(original.drawCallBatching, parsed.drawCallBatching);
-        assertEquals(original.persistentBuffers, parsed.persistentBuffers);
         assertEquals(original.chunkBuildWorkers, parsed.chunkBuildWorkers);
-        assertEquals(original.aggressiveCulling, parsed.aggressiveCulling);
-        assertEquals(original.indirectBufferBytes, parsed.indirectBufferBytes);
     }
 
     @Test
@@ -46,54 +42,31 @@ class ConfigRoundtripTest {
     void roundtripModified() {
         InteliumConfig original = new InteliumConfig();
         original.enabled = false;
-        original.drawCallBatching = false;
-        original.persistentBuffers = false;
         original.chunkBuildWorkers = 4;
-        original.aggressiveCulling = false;
-        original.indirectBufferBytes = 8 * 1024 * 1024;
 
         String json = GSON.toJson(original);
         InteliumConfig parsed = GSON.fromJson(json, InteliumConfig.class);
 
         assertFalse(parsed.enabled);
-        assertFalse(parsed.drawCallBatching);
-        assertFalse(parsed.persistentBuffers);
         assertEquals(4, parsed.chunkBuildWorkers);
-        assertFalse(parsed.aggressiveCulling);
-        assertEquals(8 * 1024 * 1024, parsed.indirectBufferBytes);
     }
 
     @Test
     @DisplayName("Serialized JSON contains all field names")
     void serializedContainsAllKeys() {
         String json = GSON.toJson(new InteliumConfig());
-        for (String key : new String[]{
-                "enabled", "drawCallBatching", "persistentBuffers",
-                "chunkBuildWorkers", "aggressiveCulling", "indirectBufferBytes"
-        }) {
+        for (String key : new String[]{"enabled", "chunkBuildWorkers"}) {
             assertTrue(json.contains(key), "missing key: " + key);
         }
     }
 
     @Test
-    @DisplayName("Missing keys fall back to Java defaults (or 0/false)")
+    @DisplayName("Missing keys fall back to Java defaults")
     void missingKeysFallback() {
-        // Gson behaviour: missing fields keep their Java defaults.
         InteliumConfig parsed = GSON.fromJson("{}", InteliumConfig.class);
         assertNotNull(parsed);
         assertTrue(parsed.enabled);
-        assertTrue(parsed.drawCallBatching);
-        assertTrue(parsed.persistentBuffers);
-        assertEquals(-1, parsed.chunkBuildWorkers);
-        assertTrue(parsed.aggressiveCulling);
-        assertEquals(0, parsed.indirectBufferBytes);
-    }
-
-    @Test
-    @DisplayName("Empty / null JSON results in fallback or null")
-    void emptyOrNull() {
-        InteliumConfig fromEmpty = GSON.fromJson("{}", InteliumConfig.class);
-        assertNotNull(fromEmpty);
+        assertEquals(0, parsed.chunkBuildWorkers);
     }
 
     @Test
@@ -105,12 +78,17 @@ class ConfigRoundtripTest {
     }
 
     @Test
-    @DisplayName("Booleans serialized as true/false")
-    void serializesBooleansCorrectly() {
-        String json = GSON.toJson(new InteliumConfig());
-        JsonObject o = JsonParser.parseString(json).getAsJsonObject();
-        assertTrue(o.get("enabled").getAsBoolean());
-        assertTrue(o.get("drawCallBatching").getAsBoolean());
+    @DisplayName("Legacy config with removed placebo fields still parses")
+    void legacyFieldsIgnored() {
+        // Configs written by older Intelium builds had these keys; they must be
+        // silently ignored, not cause a parse failure.
+        InteliumConfig parsed = GSON.fromJson(
+                "{\"enabled\":true,\"drawCallBatching\":true,\"persistentBuffers\":true,"
+                        + "\"aggressiveCulling\":true,\"indirectBufferBytes\":0,"
+                        + "\"chunkBuildWorkers\":-1}", InteliumConfig.class);
+        assertNotNull(parsed);
+        assertTrue(parsed.enabled);
+        assertEquals(-1, parsed.chunkBuildWorkers);
     }
 
     @Test
@@ -120,15 +98,6 @@ class ConfigRoundtripTest {
         c.chunkBuildWorkers = 5;
         JsonObject o = JsonParser.parseString(GSON.toJson(c)).getAsJsonObject();
         assertEquals(5, o.get("chunkBuildWorkers").getAsInt());
-    }
-
-    @Test
-    @DisplayName("Mutated then re-parsed: chunkBuildWorkers preserved")
-    void mutatedWorkers() {
-        InteliumConfig c = new InteliumConfig();
-        c.chunkBuildWorkers = 6;
-        InteliumConfig back = GSON.fromJson(GSON.toJson(c), InteliumConfig.class);
-        assertEquals(6, back.chunkBuildWorkers);
     }
 
     @Test

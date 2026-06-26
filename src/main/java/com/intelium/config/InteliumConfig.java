@@ -2,15 +2,13 @@ package com.intelium.config;
 
 public class InteliumConfig {
 
+    /** Master switch. When false, Sodium runs unmodified. */
     public boolean enabled = true;
 
-    public boolean drawCallBatching = true;
-
-    public boolean persistentBuffers = true;
-
-    public int chunkBuildWorkers = -1;
-
-    public boolean aggressiveCulling = true;
-
-    public int indirectBufferBytes = 0;
+    /**
+     * Chunk-build worker thread count. {@code 0} (or negative) means
+     * "automatic": Intelium picks a generation-aware value. A positive value
+     * overrides Sodium's own thread count directly.
+     */
+    public int chunkBuildWorkers = 0;
 }

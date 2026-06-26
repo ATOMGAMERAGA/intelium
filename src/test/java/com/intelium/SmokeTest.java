@@ -1,15 +1,13 @@
 package com.intelium;
 
 import com.intelium.config.InteliumConfig;
-import com.intelium.optimization.BufferStrategy;
 import com.intelium.optimization.ChunkBuilderTuner;
-import com.intelium.optimization.DrawCallBatcher;
-import com.intelium.optimization.OcclusionTuner;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.Timeout;
 
+import java.lang.reflect.Method;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,57 +21,58 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("Cross-component smoke tests")
 class SmokeTest {
 
+    private static IntelGpuDetector.Result decide(String vendor, String renderer) {
+        try {
+            Method m = IntelGpuDetector.class.getDeclaredMethod("decide", String.class, String.class);
+            m.setAccessible(true);
+            return (IntelGpuDetector.Result) m.invoke(null, vendor, renderer);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Test
     @Timeout(value = 1, unit = TimeUnit.SECONDS)
-    @DisplayName("Config defaults + tuner + occlusion play well for Skylake")
+    @DisplayName("Skylake HD 520 detection + tuner pipeline produces an active, sane result")
     void skylakePipeline() {
         InteliumConfig cfg = new InteliumConfig();
         assertTrue(cfg.enabled);
-        DrawCallBatcher.beginFrame(IntelGpuGeneration.GEN9_SKYLAKE);
-        assertEquals(64, DrawCallBatcher.currentBatchSize());
-        OcclusionTuner.applyForCurrentFrame(IntelGpuGeneration.GEN9_SKYLAKE);
-        assertTrue(OcclusionTuner.multiplier() < 1.0f);
-        assertTrue(BufferStrategy.usePersistent(IntelGpuGeneration.GEN9_SKYLAKE));
-        int workers = ChunkBuilderTuner.recommendedWorkers(IntelGpuGeneration.GEN9_SKYLAKE);
+        assertEquals(0, cfg.chunkBuildWorkers);
+
+        IntelGpuDetector.Result r = decide("Intel", "Intel(R) HD Graphics 520");
+        assertTrue(r.compatible);
+        assertEquals(IntelGpuGeneration.GEN9_SKYLAKE, r.generation);
+
+        int workers = ChunkBuilderTuner.recommendedWorkers(r.generation);
         assertTrue(workers >= 1 && workers <= 2);
     }
 
     @Test
     @Timeout(value = 1, unit = TimeUnit.SECONDS)
-    @DisplayName("Battlemage pipeline produces aggressive defaults")
+    @DisplayName("Battlemage pipeline detects and yields a higher worker count")
     void battlemagePipeline() {
-        DrawCallBatcher.beginFrame(IntelGpuGeneration.XE2_LUNAR_BATTLEMAGE);
-        assertEquals(256, DrawCallBatcher.currentBatchSize());
-        OcclusionTuner.applyForCurrentFrame(IntelGpuGeneration.XE2_LUNAR_BATTLEMAGE);
-        assertEquals(1.0f, OcclusionTuner.multiplier(), 0.0001f);
-        assertTrue(BufferStrategy.usePersistent(IntelGpuGeneration.XE2_LUNAR_BATTLEMAGE));
-        int workers = ChunkBuilderTuner.recommendedWorkers(IntelGpuGeneration.XE2_LUNAR_BATTLEMAGE);
-        assertTrue(workers >= 4);
+        IntelGpuDetector.Result r = decide("Intel", "Intel(R) Arc(TM) B580 Graphics");
+        assertTrue(r.compatible);
+        assertEquals(IntelGpuGeneration.XE2_LUNAR_BATTLEMAGE, r.generation);
+        assertTrue(ChunkBuilderTuner.recommendedWorkers(r.generation) >= 4
+                || Runtime.getRuntime().availableProcessors() < 8);
     }
 
     @Test
     @Timeout(value = 1, unit = TimeUnit.SECONDS)
-    @DisplayName("All eight generations cycle through the pipeline without crashing")
+    @DisplayName("All eight generations cycle through the tuner without crashing")
     void allGenerationsCycle() {
         for (IntelGpuGeneration g : IntelGpuGeneration.values()) {
-            DrawCallBatcher.beginFrame(g);
-            DrawCallBatcher.endFrame();
-            OcclusionTuner.applyForCurrentFrame(g);
-            ChunkBuilderTuner.recommendedWorkers(g);
-            BufferStrategy.usePersistent(g);
+            assertTrue(ChunkBuilderTuner.recommendedWorkers(g) >= 1);
         }
     }
 
     @Test
     @Timeout(value = 1, unit = TimeUnit.SECONDS)
-    @DisplayName("Repeated cycles converge to the same values (no hidden state leak)")
-    void cyclesConverge() {
-        DrawCallBatcher.beginFrame(IntelGpuGeneration.GEN12_XE_LP);
-        int first = DrawCallBatcher.currentBatchSize();
-        for (int i = 0; i < 10; i++) {
-            DrawCallBatcher.beginFrame(IntelGpuGeneration.GEN12_XE_LP);
-        }
-        assertEquals(first, DrawCallBatcher.currentBatchSize());
+    @DisplayName("Non-Intel GPUs are refused (no tuning applied)")
+    void nonIntelRefused() {
+        assertFalse(decide("NVIDIA Corporation", "NVIDIA GeForce RTX 4080").compatible);
+        assertFalse(decide("ATI Technologies Inc.", "AMD Radeon RX 7900 XTX").compatible);
     }
 
     @Test

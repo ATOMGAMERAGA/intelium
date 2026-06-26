@@ -15,13 +15,10 @@ class PackageClassPresenceTest {
             "com.intelium.Intelium",
             "com.intelium.IntelGpuDetector",
             "com.intelium.IntelGpuGeneration",
+            "com.intelium.SupportedGpus",
             "com.intelium.config.InteliumConfig",
             "com.intelium.config.InteliumConfigIO",
-            "com.intelium.config.InteliumConfigEntryPoint",
-            "com.intelium.optimization.ChunkBuilderTuner",
-            "com.intelium.optimization.DrawCallBatcher",
-            "com.intelium.optimization.BufferStrategy",
-            "com.intelium.optimization.OcclusionTuner"
+            "com.intelium.optimization.ChunkBuilderTuner"
     })
     @DisplayName("Class is loadable")
     void classLoads(String fqcn) {
@@ -36,10 +33,8 @@ class PackageClassPresenceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "com.intelium.mixin.MixinRenderSectionManager",
             "com.intelium.mixin.MixinSodiumWorldRenderer",
-            "com.intelium.mixin.MixinChunkBuilder",
-            "com.intelium.mixin.MixinDefaultChunkRenderer"
+            "com.intelium.mixin.MixinChunkBuilder"
     })
     @DisplayName("Mixin class is loadable (initialize=false to skip target resolution)")
     void mixinLoads(String fqcn) {
@@ -66,13 +61,11 @@ class PackageClassPresenceTest {
     }
 
     @Test
-    @DisplayName("All helper classes in optimization package are final")
+    @DisplayName("Helper classes are final")
     void helpersAreFinal() throws ClassNotFoundException {
         for (String n : new String[]{
                 "com.intelium.optimization.ChunkBuilderTuner",
-                "com.intelium.optimization.DrawCallBatcher",
-                "com.intelium.optimization.BufferStrategy",
-                "com.intelium.optimization.OcclusionTuner"
+                "com.intelium.SupportedGpus"
         }) {
             Class<?> c = Class.forName(n);
             assertTrue(java.lang.reflect.Modifier.isFinal(c.getModifiers()), n + " should be final");
@@ -84,10 +77,8 @@ class PackageClassPresenceTest {
     void mixinsAreAbstract() throws ClassNotFoundException {
         ClassLoader loader = PackageClassPresenceTest.class.getClassLoader();
         for (String n : new String[]{
-                "com.intelium.mixin.MixinRenderSectionManager",
                 "com.intelium.mixin.MixinSodiumWorldRenderer",
-                "com.intelium.mixin.MixinChunkBuilder",
-                "com.intelium.mixin.MixinDefaultChunkRenderer"
+                "com.intelium.mixin.MixinChunkBuilder"
         }) {
             Class<?> c = Class.forName(n, false, loader);
             assertTrue(java.lang.reflect.Modifier.isAbstract(c.getModifiers()),
@@ -96,10 +87,10 @@ class PackageClassPresenceTest {
     }
 
     @Test
-    @DisplayName("InteliumConfig is plain POJO (not final, has fields)")
+    @DisplayName("InteliumConfig is plain POJO with fields")
     void configIsPojo() throws ClassNotFoundException {
         Class<?> c = Class.forName("com.intelium.config.InteliumConfig");
         assertFalse(java.lang.reflect.Modifier.isAbstract(c.getModifiers()));
-        assertTrue(c.getDeclaredFields().length >= 6);
+        assertTrue(c.getDeclaredFields().length >= 2);
     }
 }

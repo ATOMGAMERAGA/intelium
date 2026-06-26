@@ -4,13 +4,11 @@
     "package": "com.intelium.mixin",
     "compatibilityLevel": "JAVA_21",
     "client": [
-        "MixinRenderSectionManager",
         "MixinSodiumWorldRenderer",
-        "MixinChunkBuilder",
-        "MixinDefaultChunkRenderer"
+        "MixinChunkBuilder"
     ],
     "injectors": {
-        "defaultRequire": 0
+        "defaultRequire": 1
     },
     "mixins": []
 }
