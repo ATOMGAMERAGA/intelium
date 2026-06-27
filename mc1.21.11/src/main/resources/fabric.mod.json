@@ -1,0 +1,40 @@
+{
+    "schemaVersion": 1,
+    "id": "intelium",
+    "version": "${version}",
+    "name": "Intelium",
+    "description": "Intel GPU optimization backend for Sodium. Boosts FPS on Intel iGPUs and automatically disables itself on NVIDIA/AMD systems.",
+    "authors": [
+        "ATOMLAND Studios"
+    ],
+    "contact": {
+        "homepage": "https://modrinth.com/mod/intelium-mod",
+        "sources": "https://github.com/ATOMGAMERAGA/intelium",
+        "issues": "https://github.com/ATOMGAMERAGA/intelium/issues"
+    },
+    "license": "GPL-3.0-only",
+    "icon": "assets/intelium/icon.png",
+    "environment": "client",
+    "entrypoints": {
+        "client": [
+            "com.intelium.Intelium",
+            "com.intelium.client.InteliumClientInit"
+        ],
+        "sodium:config_api_user": [
+            "com.intelium.config.InteliumConfigEntryPoint"
+        ]
+    },
+    "mixins": [
+        {
+            "config": "intelium.mixins.json",
+            "environment": "client"
+        }
+    ],
+    "depends": {
+        "fabricloader": ">=0.18.0",
+        "fabric-api": "*",
+        "minecraft": ">=1.21.11 <1.22",
+        "java": ">=21",
+        "sodium": ">=0.8.0"
+    }
+}

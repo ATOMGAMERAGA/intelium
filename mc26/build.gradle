@@ -1,0 +1,179 @@
+plugins {
+    // 26.1+ is unobfuscated; use the new non-remapping Loom plugin.
+    id 'net.fabricmc.fabric-loom' version '1.17.12'
+    id 'maven-publish'
+    id 'java'
+}
+
+// Version override: -PinteliumVersion=1.2.0-build...
+def overrideVersion = project.findProperty('inteliumVersion')
+version = overrideVersion ?: project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archive_base_name
+}
+
+repositories {
+    maven {
+        name = "CaffeineMC"
+        url = "https://maven.caffeinemc.net/releases"
+    }
+    maven {
+        name = "CaffeineMC Snapshots"
+        url = "https://maven.caffeinemc.net/snapshots"
+    }
+    maven {
+        name = "Modrinth Maven"
+        url = "https://api.modrinth.com/maven"
+        content {
+            includeGroup "maven.modrinth"
+        }
+    }
+    mavenCentral()
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        "intelium" {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+// Shared, version-agnostic logic + tests (see ../shared). Compiled into this
+// 26.x build exactly as into the 1.21.11 build.
+sourceSets {
+    main { java.srcDir file("$rootDir/../shared/src/main/java") }
+    test { java.srcDir file("$rootDir/../shared/src/test/java") }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    // No 'mappings' line: 26.x is unobfuscated (official Mojang names).
+    // The non-remapping Loom plugin uses plain implementation/compileOnly for
+    // mods (modImplementation/remapJar no longer exist).
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    // Full Sodium jar from Modrinth (Intelium mixins touch Sodium internals that
+    // the api-only artifact does not ship). gradle.properties holds the full
+    // Modrinth coordinate (e.g. mc26.2-0.9.0-fabric).
+    implementation "maven.modrinth:sodium:${project.sodium_version}"
+
+    // Test dependencies
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.10.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+}
+
+processResources {
+    inputs.property "version", project.version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": inputs.properties.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+    it.options.encoding = 'UTF-8'
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed', 'standardError'
+        exceptionFormat = 'full'
+        showStandardStreams = false
+    }
+    systemProperty 'project.rootDir', projectDir.absolutePath
+}
+
+jar {
+    from("$rootDir/../LICENSE") {
+        rename { "${it}_${base.archivesName.get()}" }
+    }
+    manifest {
+        attributes(
+            'Implementation-Title': 'Intelium',
+            'Implementation-Version': project.version,
+            'Implementation-Vendor': 'ATOMLAND Studios',
+            'Built-By': System.getProperty('user.name'),
+            'Build-Jdk': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+            'Build-OS': "${System.getProperty('os.name')} ${System.getProperty('os.version')}",
+            'Build-Timestamp': new Date().toInstant().toString(),
+            'Build-Git-Sha': System.getenv('GITHUB_SHA') ?: 'local',
+            'Build-Number': System.getenv('GITHUB_RUN_NUMBER') ?: '0',
+            'Specification-Title': 'Intelium Fabric Mod',
+            'Specification-Version': project.mod_version,
+            'Specification-Vendor': 'ATOMLAND Studios',
+            'Mod-Id': 'intelium',
+            'Mod-Loader': 'fabric',
+            'Mod-Loader-Version': project.loader_version,
+            'Mod-Minecraft-Version': project.minecraft_version,
+            'Mod-Sodium-Version': project.sodium_version,
+            'Mod-Fabric-Api-Version': project.fabric_version
+        )
+    }
+}
+
+tasks.register('writeDependencyList') {
+    description = 'Writes a flat list of resolved runtime dependencies to build/dependencies.txt'
+    group = 'verification'
+    def outFile = layout.buildDirectory.file('dependencies.txt')
+    outputs.file(outFile)
+    doLast {
+        def f = outFile.get().asFile
+        f.parentFile.mkdirs()
+        f.withWriter('UTF-8') { w ->
+            w.writeLine('# Intelium resolved dependencies (26.x)')
+            w.writeLine('# Generated: ' + new Date().toInstant().toString())
+            w.writeLine('# Version: ' + project.version)
+            w.writeLine('')
+            w.writeLine('## Build configuration')
+            w.writeLine('minecraft = ' + project.minecraft_version)
+            w.writeLine('mappings = official (unobfuscated)')
+            w.writeLine('fabric_loader = ' + project.loader_version)
+            w.writeLine('fabric_api = ' + project.fabric_version)
+            w.writeLine('sodium = ' + project.sodium_version)
+            w.writeLine('java = 25')
+        }
+        println "Wrote dependency list to ${f.absolutePath}"
+    }
+}
+
+tasks.register('writeChecksums') {
+    description = 'Writes SHA-256 and SHA-512 checksums for the mod jar'
+    group = 'verification'
+    // No remapJar on the non-remapping plugin: the jar task is the final mod jar.
+    dependsOn tasks.named('jar')
+    doLast {
+        def jarFile = tasks.named('jar').get().archiveFile.get().asFile
+        if (!jarFile.exists()) {
+            throw new GradleException("Remapped jar not found at ${jarFile.absolutePath}")
+        }
+        ['SHA-256', 'SHA-512'].each { algo ->
+            def md = java.security.MessageDigest.getInstance(algo)
+            jarFile.eachByte(8192) { buf, len -> md.update(buf, 0, len) }
+            def hex = md.digest().collect { String.format('%02x', it) }.join('')
+            def ext = algo.toLowerCase().replace('-', '')
+            def out = new File(jarFile.parentFile, "${jarFile.name}.${ext}")
+            out.text = "${hex}  ${jarFile.name}\n"
+            println "Wrote ${out.name}"
+        }
+    }
+}
+
+build.finalizedBy(writeDependencyList, writeChecksums)

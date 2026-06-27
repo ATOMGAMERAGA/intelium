@@ -1,0 +1,15 @@
+{
+    "required": true,
+    "minVersion": "0.8.5",
+    "package": "com.intelium.mixin",
+    "compatibilityLevel": "JAVA_25",
+    "plugin": "com.intelium.mixin.InteliumMixinPlugin",
+    "client": [
+        "MixinSodiumWorldRenderer",
+        "MixinChunkBuilder"
+    ],
+    "injectors": {
+        "defaultRequire": 0
+    },
+    "mixins": []
+}

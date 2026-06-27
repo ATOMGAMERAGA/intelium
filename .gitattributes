@@ -1,0 +1,22 @@
+# Normalize line endings: text files are LF in the repo and on checkout.
+# This overrides a developer's core.autocrlf=true, so the source-layout and
+# fabric.mod.json line-ending tests pass on Windows checkouts too.
+* text=auto eol=lf
+
+# Explicit LF for the file types the build and tests care about.
+*.java   text eol=lf
+*.json   text eol=lf
+*.gradle text eol=lf
+*.properties text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.md     text eol=lf
+*.txt    text eol=lf
+gradlew  text eol=lf
+
+# Binary assets must never be touched.
+*.png    binary
+*.jar    binary
+*.der    binary
+*.dat    binary
+*.mca    binary

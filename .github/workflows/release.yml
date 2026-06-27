@@ -1,4 +1,4 @@
-name: Build, Test, Sign, Release
+name: Build, Test, Release
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: 'Create a GitHub release with signed jar'
+        description: 'Create a GitHub release with the built jars'
         required: false
         default: 'true'
 
@@ -21,401 +21,140 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  INTELIUM_VERSION: "1.2.0"
+
 jobs:
-  test:
-    name: Run unit tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          check-latest: true
-
-      - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v3
-        continue-on-error: true
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
-      - name: Print Gradle and Java info
-        run: |
-          ./gradlew --version
-          java -version
-          javac -version
-
-      - name: Show project structure
-        run: |
-          echo "===== Source tree ====="
-          find src -type f | sort
-          echo "===== Resources ====="
-          find src/main/resources -type f | sort
-
-      - name: Compile main sources
-        run: ./gradlew compileJava --no-daemon --stacktrace
-
-      - name: Compile test sources
-        run: ./gradlew compileTestJava --no-daemon --stacktrace
-
-      - name: Run all tests
-        run: ./gradlew test --no-daemon --info --stacktrace
-
-      - name: Upload test reports (HTML)
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-reports-html
-          path: build/reports/tests/test/
-          retention-days: 14
-
-      - name: Upload test XML
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results-xml
-          path: build/test-results/test/
-          retention-days: 14
-
-      - name: Print test summary
-        if: always()
-        run: |
-          if [ -d build/test-results/test ]; then
-            echo "===== Test result XML files ====="
-            ls -la build/test-results/test || true
-            total=$(grep -h 'tests=' build/test-results/test/*.xml 2>/dev/null \
-              | grep -oP 'tests="\d+"' | grep -oP '\d+' | paste -sd+ - | bc || echo 0)
-            failures=$(grep -h 'failures=' build/test-results/test/*.xml 2>/dev/null \
-              | grep -oP 'failures="\d+"' | grep -oP '\d+' | paste -sd+ - | bc || echo 0)
-            errors=$(grep -h 'errors=' build/test-results/test/*.xml 2>/dev/null \
-              | grep -oP 'errors="\d+"' | grep -oP '\d+' | paste -sd+ - | bc || echo 0)
-            echo "Total tests: ${total:-0}"
-            echo "Failures:    ${failures:-0}"
-            echo "Errors:      ${errors:-0}"
-          fi
-
   build:
-    name: Build, sign, release
-    needs: test
+    name: Build & test ${{ matrix.label }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mc1.21.11
+            java: '21'
+            label: '1.21.11'
+            jarname: 'Intelium-v1.2.0-1.21.11.jar'
+          - target: mc26
+            java: '25'
+            label: '26.x'
+            jarname: 'Intelium-v1.2.0-26.x.jar'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 21
+      - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: ${{ matrix.java }}
           check-latest: true
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Make gradlew executable
-        run: chmod +x ./gradlew
+        run: chmod +x ./${{ matrix.target }}/gradlew
 
-      - name: Resolve release version
-        id: version
+      - name: Build & test (${{ matrix.label }})
         run: |
-          # Fixed, human-readable release version. The published mod reports
-          # exactly "1.1.0" and the GitHub release is tagged "v1.1.0".
-          VERSION="1.1.0"
-          TAG="v${VERSION}"
-          echo "Release version: $VERSION"
-          echo "Release tag:     $TAG"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "INTELIUM_VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "INTELIUM_TAG=$TAG" >> "$GITHUB_ENV"
-
-      - name: Build mod jar
-        run: |
-          ./gradlew clean build \
+          ./${{ matrix.target }}/gradlew -p ${{ matrix.target }} clean build \
             -PinteliumVersion="${INTELIUM_VERSION}" \
             --no-daemon --stacktrace
 
-      - name: Generate resolved dependency list
+      - name: Collect the mod jar
         run: |
-          ./gradlew writeDependencyList \
-            -PinteliumVersion="${INTELIUM_VERSION}" \
-            --no-daemon
+          mkdir -p dist
+          SRC=$(ls ${{ matrix.target }}/build/libs/intelium-*.jar | grep -v sources | head -1)
+          echo "Built: $SRC"
+          cp "$SRC" "dist/${{ matrix.jarname }}"
+          ls -la dist/
 
-      - name: Run dependencies report
-        run: |
-          ./gradlew dependencies --configuration runtimeClasspath \
-            -PinteliumVersion="${INTELIUM_VERSION}" \
-            --no-daemon > build/runtimeClasspath.txt || true
-          ./gradlew dependencies --configuration compileClasspath \
-            -PinteliumVersion="${INTELIUM_VERSION}" \
-            --no-daemon > build/compileClasspath.txt || true
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports-${{ matrix.target }}
+          path: ${{ matrix.target }}/build/reports/tests/test/
+          retention-days: 14
 
-      - name: Show built artifacts
-        run: |
-          echo "===== build/libs ====="
-          ls -la build/libs/
-          echo "===== build/*.txt ====="
-          ls -la build/*.txt || true
-          echo "===== build/dependencies.txt ====="
-          cat build/dependencies.txt || true
-
-      - name: Generate self-signed code-signing keystore
-        run: |
-          # PKCS12 only supports one password for the key store and the key
-          # entry (modern keytool will warn and ignore -keypass if they differ,
-          # then jarsigner fails to unlock the private key with "not a private
-          # key"). Use a single random password for both.
-          KEYSTORE_PASS=$(openssl rand -hex 32)
-          echo "::add-mask::$KEYSTORE_PASS"
-          echo "KEYSTORE_PASS=$KEYSTORE_PASS" >> "$GITHUB_ENV"
-          keytool -genkeypair \
-            -alias intelium-build \
-            -keyalg RSA -keysize 4096 \
-            -sigalg SHA256withRSA \
-            -storetype PKCS12 \
-            -keystore intelium-build.p12 \
-            -storepass "$KEYSTORE_PASS" \
-            -keypass "$KEYSTORE_PASS" \
-            -dname "CN=Intelium Build CI, OU=Intelium Mod CI, O=Intelium Contributors, L=Internet, ST=NA, C=NA" \
-            -validity 3650
-          echo "Keystore generated:"
-          keytool -list -v -keystore intelium-build.p12 -storepass "$KEYSTORE_PASS" | head -30
-
-      - name: Export public certificate
-        run: |
-          keytool -exportcert \
-            -alias intelium-build \
-            -keystore intelium-build.p12 \
-            -storepass "$KEYSTORE_PASS" \
-            -storetype PKCS12 \
-            -rfc \
-            -file build/libs/intelium-build-cert.pem
-          # Also export DER form
-          keytool -exportcert \
-            -alias intelium-build \
-            -keystore intelium-build.p12 \
-            -storepass "$KEYSTORE_PASS" \
-            -storetype PKCS12 \
-            -file build/libs/intelium-build-cert.der
-          echo "Public certificate fingerprint:"
-          keytool -printcert -file build/libs/intelium-build-cert.pem | head -20
-
-      - name: Sign the mod jar
-        run: |
-          JAR_FILE=$(ls build/libs/intelium-*.jar | grep -v sources | grep -v dev | head -1)
-          echo "Signing: $JAR_FILE"
-          jarsigner \
-            -keystore intelium-build.p12 \
-            -storetype PKCS12 \
-            -storepass "$KEYSTORE_PASS" \
-            -keypass "$KEYSTORE_PASS" \
-            -sigalg SHA256withRSA \
-            -digestalg SHA-256 \
-            "$JAR_FILE" \
-            intelium-build
-          echo "Verifying signature..."
-          jarsigner -verify -verbose -certs "$JAR_FILE" | tail -20
-          jarsigner -verify -strict "$JAR_FILE" || true
-
-      - name: Sign sources jar (if present)
-        run: |
-          SRC_JAR=$(ls build/libs/intelium-*-sources.jar 2>/dev/null | head -1 || true)
-          if [ -n "$SRC_JAR" ]; then
-            echo "Signing sources jar: $SRC_JAR"
-            jarsigner \
-              -keystore intelium-build.p12 \
-              -storetype PKCS12 \
-              -storepass "$KEYSTORE_PASS" \
-              -keypass "$KEYSTORE_PASS" \
-              -sigalg SHA256withRSA \
-              -digestalg SHA-256 \
-              "$SRC_JAR" \
-              intelium-build
-          fi
-
-      - name: Generate ephemeral GPG key
-        run: |
-          GPG_HOME=$(mktemp -d)
-          echo "GPG_HOME=$GPG_HOME" >> "$GITHUB_ENV"
-          chmod 700 "$GPG_HOME"
-          cat > "$GPG_HOME/gen-key.conf" <<EOF
-          %no-protection
-          Key-Type: RSA
-          Key-Length: 4096
-          Subkey-Type: RSA
-          Subkey-Length: 4096
-          Name-Real: Intelium Build CI
-          Name-Email: ci@intelium.invalid
-          Expire-Date: 0
-          %commit
-          EOF
-          gpg --homedir "$GPG_HOME" --batch --gen-key "$GPG_HOME/gen-key.conf"
-          echo "GPG key generated. Listing:"
-          gpg --homedir "$GPG_HOME" --list-keys
-
-      - name: Detach-sign jar with GPG
-        run: |
-          JAR_FILE=$(ls build/libs/intelium-*.jar | grep -v sources | head -1)
-          gpg --homedir "$GPG_HOME" --batch --yes --armor --detach-sign --output "${JAR_FILE}.asc" "$JAR_FILE"
-          gpg --homedir "$GPG_HOME" --armor --export "ci@intelium.invalid" > build/libs/intelium-build-public-key.asc
-          echo "GPG signature created at ${JAR_FILE}.asc"
-          gpg --homedir "$GPG_HOME" --verify "${JAR_FILE}.asc" "$JAR_FILE"
-
-      - name: Compute SHA-256 and SHA-512 checksums
-        run: |
-          cd build/libs
-          for f in intelium-*.jar; do
-            sha256sum "$f" > "${f}.sha256"
-            sha512sum "$f" > "${f}.sha512"
-            echo "$f checksums:"
-            cat "${f}.sha256"
-            cat "${f}.sha512"
-          done
-
-      - name: Write build manifest
-        run: |
-          JAR_FILE=$(ls build/libs/intelium-*.jar | grep -v sources | head -1)
-          cat > build/libs/BUILD-MANIFEST.txt <<EOF
-          Intelium build manifest
-          =======================
-          version:      ${INTELIUM_VERSION}
-          tag:          ${INTELIUM_TAG}
-          built-at:     $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          built-from:   ${GITHUB_REPOSITORY}@${GITHUB_SHA}
-          build-id:     ${GITHUB_RUN_ID}
-          run-number:   ${GITHUB_RUN_NUMBER}
-          workflow:     ${GITHUB_WORKFLOW}
-          runner-os:    ${RUNNER_OS}
-          java:         $(java -version 2>&1 | head -1)
-          jarsigner:    SHA256withRSA, SHA-256 digest, self-signed (CN=Intelium Build CI)
-          gpg:          RSA 4096, ephemeral CI key (ci@intelium.invalid)
-          jar-file:     $(basename "$JAR_FILE")
-          jar-bytes:    $(stat -c%s "$JAR_FILE")
-          EOF
-          echo "===== BUILD-MANIFEST.txt ====="
-          cat build/libs/BUILD-MANIFEST.txt
-
-      - name: Copy resolved dependency list into release
-        run: |
-          cp build/dependencies.txt build/libs/dependencies.txt || true
-          cp build/runtimeClasspath.txt build/libs/runtimeClasspath.txt || true
-          cp build/compileClasspath.txt build/libs/compileClasspath.txt || true
-
-      - name: Final artifact listing
-        run: ls -la build/libs/
-
-      - name: Upload release artifacts
+      - name: Upload jar artifact
         uses: actions/upload-artifact@v4
         with:
-          name: intelium-${{ steps.version.outputs.version }}
-          path: |
-            build/libs/intelium-*.jar
-            build/libs/intelium-*.jar.asc
-            build/libs/intelium-*.jar.sha256
-            build/libs/intelium-*.jar.sha512
-            build/libs/intelium-build-cert.pem
-            build/libs/intelium-build-cert.der
-            build/libs/intelium-build-public-key.asc
-            build/libs/BUILD-MANIFEST.txt
-            build/libs/dependencies.txt
-            build/libs/runtimeClasspath.txt
-            build/libs/compileClasspath.txt
+          name: jar-${{ matrix.target }}
+          path: dist/${{ matrix.jarname }}
           retention-days: 90
 
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    # Only publish from main or a version tag. Pushes to claude/** branches still
+    # run the build job above (real-environment validation) but do NOT release.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all jar artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jar-*
+          path: dist
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -la dist/
+
       - name: Create GitHub release
-        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: Intelium ${{ steps.version.outputs.version }}
+          tag_name: "v${{ env.INTELIUM_VERSION }}"
+          name: "Intelium ${{ env.INTELIUM_VERSION }}"
           body: |
-            ## Intelium ${{ steps.version.outputs.version }}
+            ## Intelium ${{ env.INTELIUM_VERSION }}
 
-            Fast chunk loading update. Built, tested, and signed automatically by the release workflow.
+            Two jars, one per Minecraft line. Download the one matching your version:
 
-            ### What's new in 1.1.0
-            - **Fast Chunk Loading (new):** overrides Sodium's chunk defer mode — which defaults to the *slowest* `Always` — so freshly meshed chunks appear much sooner, and boosts build throughput. Choose **Fast** (one-frame, recommended) or **Turbo** (zero-frame, fastest). Reversible and crash-safe.
+            | Jar | Minecraft | Java |
+            |---|---|---|
+            | `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` | 1.21.11 | 21 |
+            | `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 |
 
-            ### Since 1.0.0
-            - Fixed the FPS regression: the chunk-worker tuner no longer starves chunk building on quad-core iGPUs, so turning/walking no longer hitches.
-            - Optimization profiles: Max FPS / Balanced / Smooth.
-            - Live render tweaks (opt-in, reversible): entity-distance cap, particle limit, entity-shadow toggle, fast biome blend.
-            - Overlay: 1% low / minimum FPS stutter line + compact mode.
-            - Fairer A/B benchmark: longer warmup so the chunk-rebuild spike no longer penalises the ON measurement.
+            Made by **ATOMLAND Studios** · <https://modrinth.com/mod/intelium-mod>
 
-            ### Verification
-            The jar is signed two ways for trust:
-            - **`jarsigner`** signature (`SHA256withRSA`, self-signed CI cert)
-            - **GPG** detached signature (`.asc`) from an ephemeral CI key
+            ---
 
-            Verify integrity with the included checksums:
-            ```
-            sha256sum -c intelium-${{ steps.version.outputs.version }}.jar.sha256
-            sha512sum -c intelium-${{ steps.version.outputs.version }}.jar.sha512
-            ```
+            ### Modrinth changelog (copy the block below)
 
-            Verify the GPG signature:
-            ```
-            gpg --import intelium-build-public-key.asc
-            gpg --verify intelium-${{ steps.version.outputs.version }}.jar.asc
-            ```
+            ````markdown
+            ## English
 
-            Inspect the embedded jarsigner certificate:
-            ```
-            keytool -printcert -file intelium-build-cert.pem
-            ```
+            Multi-version release: Intelium now supports Minecraft **1.21.11** and the **26.x** line (26.1, 26.1.1, 26.1.2, 26.2), including 26.2's new Vulkan renderer.
 
-            ### Build context
-            - Source: ${{ github.repository }}@${{ github.sha }}
-            - Workflow run: ${{ github.run_id }}
-            - Java: 21 (Temurin)
+            - **Two jars, one per Minecraft line.** Pick `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) or `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). The 26.x jar runs on 26.1 → 26.2 and adapts to the Sodium version present.
+            - **Built on the latest Sodium APIs** for each version (Sodium 0.8.x on 1.21.11, 0.8.x/0.9.x on the 26.x line) using official 26.x mappings.
+            - **More FPS, safely:** generation- and profile-aware chunk-build worker count, fast chunk loading (Sodium defer-mode override), and live render tweaks (entity distance, particles, entity shadows, biome blend).
+            - **Plays nice with GPU mods:** verified no conflict with GPUTape and AsyncParticles — Intelium never touches GL/Vulkan buffers, and it steps aside on the particle setting when AsyncParticles is installed.
+            - **Languages:** full Türkçe and American English; any English variant and any other locale fall back to American English automatically.
+            - Note: on 26.x, the movable FPS overlay and custom screens are temporarily omitted (Minecraft 26 reworked its GUI for Vulkan); the core optimizations and the Sodium settings page are fully functional.
 
-            ### Bundled artifacts
-            - `intelium-<version>.jar` &mdash; signed mod jar
-            - `intelium-<version>.jar.asc` &mdash; GPG detached signature
-            - `intelium-<version>.jar.sha256` &mdash; SHA-256 checksum
-            - `intelium-<version>.jar.sha512` &mdash; SHA-512 checksum
-            - `intelium-build-cert.pem` / `.der` &mdash; jarsigner public certificate
-            - `intelium-build-public-key.asc` &mdash; GPG public key
-            - `BUILD-MANIFEST.txt` &mdash; full build provenance
-            - `dependencies.txt` &mdash; flat list of resolved Gradle dependencies
-            - `runtimeClasspath.txt` / `compileClasspath.txt` &mdash; detailed dependency trees
+            ## Türkçe (Turkish)
 
-            > **Note about signing trust:** the jarsigner cert and GPG key are
-            > generated freshly by the CI workflow for this build only. They
-            > prove that this artifact was produced exactly by this workflow
-            > run and has not been tampered with afterwards. They are **not**
-            > issued by a public CA. Compare the certificate fingerprint in the
-            > release with the value printed in the workflow logs.
+            Çoklu sürüm: Intelium artık Minecraft **1.21.11** ve **26.x** serisini (26.1, 26.1.1, 26.1.2, 26.2) destekliyor — 26.2'nin yeni Vulkan render motoru dahil.
+
+            - **İki jar, her Minecraft serisi için bir tane.** `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) ya da `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25) seç. 26.x jar'ı 26.1 → 26.2 arasında çalışır ve mevcut Sodium sürümüne uyum sağlar.
+            - **Her sürüm için en güncel Sodium API'leri** kullanıldı (1.21.11'de Sodium 0.8.x, 26.x serisinde 0.8.x/0.9.x), 26.x için resmi eşlemelerle.
+            - **Daha fazla FPS, güvenle:** nesle ve profile duyarlı chunk-build worker sayısı, hızlı chunk yükleme (Sodium defer-mode geçersiz kılma) ve canlı render ayarları (varlık mesafesi, parçacıklar, varlık gölgeleri, biyom karışımı).
+            - **GPU modlarıyla uyumlu:** GPUTape ve AsyncParticles ile çakışma olmadığı doğrulandı — Intelium GL/Vulkan tamponlarına asla dokunmaz ve AsyncParticles kuruluyken parçacık ayarından çekilir.
+            - **Diller:** tam Türkçe ve Amerikan İngilizcesi; herhangi bir İngilizce çeşidi ve diğer tüm diller otomatik olarak Amerikan İngilizcesine döner.
+            - Not: 26.x'te taşınabilir FPS ekranı ve özel ekranlar geçici olarak yok (Minecraft 26, GUI'yi Vulkan için yeniledi); çekirdek optimizasyonlar ve Sodium ayar sayfası tam çalışır durumda.
+            ````
           files: |
-            build/libs/intelium-*.jar
-            build/libs/intelium-*.jar.asc
-            build/libs/intelium-*.jar.sha256
-            build/libs/intelium-*.jar.sha512
-            build/libs/intelium-build-cert.pem
-            build/libs/intelium-build-cert.der
-            build/libs/intelium-build-public-key.asc
-            build/libs/BUILD-MANIFEST.txt
-            build/libs/dependencies.txt
-            build/libs/runtimeClasspath.txt
-            build/libs/compileClasspath.txt
+            dist/Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar
+            dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar
           draft: false
           prerelease: false
           generate_release_notes: false
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
