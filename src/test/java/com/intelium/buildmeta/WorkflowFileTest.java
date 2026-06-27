@@ -61,15 +61,15 @@ class WorkflowFileTest {
     }
 
     @Test
-    @DisplayName("Workflow publishes the fixed 1.0.1 release")
+    @DisplayName("Workflow publishes the fixed 1.1.0 release")
     void usesFixedVersion() {
-        assertTrue(content.contains("VERSION=\"1.0.1\""),
-                "release version must be the fixed 1.0.1");
+        assertTrue(content.contains("VERSION=\"1.1.0\""),
+                "release version must be the fixed 1.1.0");
         assertTrue(content.contains("TAG=\"v${VERSION}\"")
-                        || content.contains("v1.0.1"),
-                "release must be tagged v1.0.1");
+                        || content.contains("v1.1.0"),
+                "release must be tagged v1.1.0");
         assertTrue(content.contains("prerelease: false"),
-                "1.0.1 must be a full release, not a prerelease");
+                "1.1.0 must be a full release, not a prerelease");
     }
 
     @Test

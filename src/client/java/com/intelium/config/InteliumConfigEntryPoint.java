@@ -1,10 +1,12 @@
 package com.intelium.config;
 
 import com.intelium.Intelium;
+import com.intelium.client.ChunkLoadingBooster;
 import com.intelium.client.InteliumGame;
 import com.intelium.client.RenderTweaks;
 import com.intelium.client.hud.OverlayEditScreen;
 import com.intelium.gui.SupportedGpusScreen;
+import com.intelium.optimization.ChunkLoadingMode;
 import com.intelium.optimization.OptimizationProfile;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.StorageEventHandler;
@@ -160,6 +162,22 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                                 .setBinding(v -> cfg.fastBiomeBlend = v, () -> cfg.fastBiomeBlend)
                                 .setApplyHook(state -> RenderTweaks.apply())
                                 .setDefaultValue(false)
+                        )
+                )
+                .addOptionGroup(builder.createOptionGroup()
+                        .setName(Text.translatable("intelium.options.group.chunks"))
+                        .addOption(builder.createEnumOption(id("fast_chunks"), ChunkLoadingMode.class)
+                                .setName(Text.translatable("intelium.options.fast_chunks"))
+                                .setTooltip(Text.translatable("intelium.options.fast_chunks.tooltip"))
+                                .setElementNameProvider(m -> Text.translatable(m.displayKey()))
+                                .setStorageHandler(saveHook)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE)
+                                .setBinding(v -> cfg.chunkLoadingMode = v.key,
+                                            () -> ChunkLoadingMode.fromKey(cfg.chunkLoadingMode))
+                                // Defer mode is read live by Sodium; reload so the
+                                // change is visible immediately.
+                                .setApplyHook(state -> { ChunkLoadingBooster.apply(); InteliumGame.reloadChunks(); })
+                                .setDefaultValue(ChunkLoadingMode.FAST)
                         )
                 )
         );

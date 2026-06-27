@@ -24,6 +24,8 @@ public class InteliumClientInit implements ClientModInitializer {
             // Keep the live render tweaks reconciled with the config. Cheap: it
             // only writes a game option when the value actually differs.
             RenderTweaks.apply();
+            // Keep Sodium's defer mode in sync with the fast-chunk-loading mode.
+            ChunkLoadingBooster.apply();
             int fps = client.getCurrentFps();
             InteliumOverlay.TRACKER.push(fps);
             AbBenchmark.INSTANCE.tick(System.currentTimeMillis(), fps);

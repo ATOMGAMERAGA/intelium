@@ -31,6 +31,7 @@ in `src/main/resources/assets/intelium/icon.png`.
 | Area | What Intelium does |
 |---|---|
 | Chunk build threading | Overrides Sodium's chunk-build worker count with a generation- and profile-aware value. It scales with your CPU and reserves headroom for the render thread, so chunks keep up while you move (no hitch when new chunks enter view) without starving the frame. Honors a manual override. |
+| Fast chunk loading | Overrides Sodium's chunk **defer mode** — which ships at the slowest setting (`Always`) — so freshly meshed chunks become visible much sooner, and boosts build throughput. **Fast** = one-frame delay (recommended), **Turbo** = zero-frame (fastest). Self-disables cleanly if a Sodium build moves the setting. |
 | Live render tweaks | Opt-in caps on vanilla settings that cost real per-frame GPU/CPU time on weak iGPUs: entity render distance, particles, entity shadows, and biome blending. Each captures your original value and restores it when turned off. |
 | Optimization profile | **Max FPS / Balanced / Smooth** — shifts the chunk-worker trade-off toward peak frame rate or toward steady frame times while walking and turning. |
 | Stutter visibility | The overlay shows the **1% low** and **minimum** FPS over the last few seconds, so you can see hitches, not just the headline average. |
@@ -103,6 +104,7 @@ Settings are split across two pages: **General** (core + render tweaks) and
 | Enable Intelium | `true` | Master switch. Greyed out when the GPU is unsupported. |
 | Optimization Profile | `Balanced` | **Max FPS** favors peak frame rate (fewer workers); **Smooth** favors stable frame times while moving (more workers); **Balanced** is the middle. |
 | Chunk Build Workers | `Auto` | `0` / Auto = generation- and profile-aware default; `1–16` overrides Sodium's worker count directly. |
+| Fast Chunk Loading | `Fast` | **Off** leaves Sodium's defer mode; **Fast** = one-frame deferral (chunks appear much sooner, minimal cost); **Turbo** = zero-frame (fastest, may cost some smoothness). Also boosts build throughput. |
 
 **General → Render Tweaks** (applied live to vanilla settings; your originals are restored when turned off)
 

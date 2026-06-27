@@ -77,7 +77,7 @@ class InteliumConfigTest {
         // Every field is a real, wired setting. They must all be public &
         // non-static so Gson can persist them.
         String[] expected = {
-                "enabled", "profile", "chunkBuildWorkers",
+                "enabled", "profile", "chunkBuildWorkers", "chunkLoadingMode",
                 "tuneFrameSettings", "maxEntityDistancePercent", "limitParticles",
                 "disableEntityShadows", "fastBiomeBlend",
                 "overlayEnabled", "overlayCompact", "overlayShowLows",
@@ -104,6 +104,12 @@ class InteliumConfigTest {
     @DisplayName("Default profile is balanced")
     void defaultProfile() {
         assertEquals("balanced", new InteliumConfig().profile);
+    }
+
+    @Test
+    @DisplayName("Default chunk loading mode is fast")
+    void defaultChunkLoadingMode() {
+        assertEquals("fast", new InteliumConfig().chunkLoadingMode);
     }
 
     @Test

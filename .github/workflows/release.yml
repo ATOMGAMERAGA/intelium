@@ -135,8 +135,8 @@ jobs:
         id: version
         run: |
           # Fixed, human-readable release version. The published mod reports
-          # exactly "1.0.1" and the GitHub release is tagged "v1.0.1".
-          VERSION="1.0.1"
+          # exactly "1.1.0" and the GitHub release is tagged "v1.1.0".
+          VERSION="1.1.0"
           TAG="v${VERSION}"
           echo "Release version: $VERSION"
           echo "Release tag:     $TAG"
@@ -347,14 +347,17 @@ jobs:
           body: |
             ## Intelium ${{ steps.version.outputs.version }}
 
-            Performance + settings update. Built, tested, and signed automatically by the release workflow.
+            Fast chunk loading update. Built, tested, and signed automatically by the release workflow.
 
-            ### What's new in 1.0.1
-            - **Fixed the FPS regression:** the chunk-worker tuner no longer starves chunk building on quad-core iGPUs, so turning and walking no longer hitches.
-            - **New optimization profiles:** Max FPS / Balanced / Smooth.
-            - **New live render tweaks** (opt-in, reversible): entity-distance cap, particle limit, entity-shadow toggle, fast biome blend.
-            - **Overlay:** added a 1% low / minimum FPS stutter line, plus compact mode.
-            - **Fairer A/B benchmark:** longer warmup so the chunk-rebuild spike no longer penalises the ON measurement.
+            ### What's new in 1.1.0
+            - **Fast Chunk Loading (new):** overrides Sodium's chunk defer mode — which defaults to the *slowest* `Always` — so freshly meshed chunks appear much sooner, and boosts build throughput. Choose **Fast** (one-frame, recommended) or **Turbo** (zero-frame, fastest). Reversible and crash-safe.
+
+            ### Since 1.0.0
+            - Fixed the FPS regression: the chunk-worker tuner no longer starves chunk building on quad-core iGPUs, so turning/walking no longer hitches.
+            - Optimization profiles: Max FPS / Balanced / Smooth.
+            - Live render tweaks (opt-in, reversible): entity-distance cap, particle limit, entity-shadow toggle, fast biome blend.
+            - Overlay: 1% low / minimum FPS stutter line + compact mode.
+            - Fairer A/B benchmark: longer warmup so the chunk-rebuild spike no longer penalises the ON measurement.
 
             ### Verification
             The jar is signed two ways for trust:

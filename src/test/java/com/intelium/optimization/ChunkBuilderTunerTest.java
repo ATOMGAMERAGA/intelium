@@ -89,6 +89,34 @@ class ChunkBuilderTunerTest {
     }
 
     @Test
+    @DisplayName("Fast load never reduces, and usually raises, the worker count")
+    void fastLoadBoostsThroughput() {
+        for (int cpu = 1; cpu <= 32; cpu++) {
+            for (IntelGpuGeneration gen : IntelGpuGeneration.values()) {
+                for (OptimizationProfile p : OptimizationProfile.values()) {
+                    int normal = ChunkBuilderTuner.recommendedWorkers(gen, p, cpu, false);
+                    int fast = ChunkBuilderTuner.recommendedWorkers(gen, p, cpu, true);
+                    assertTrue(fast >= normal,
+                            gen + "/" + p + "/cpu=" + cpu + " normal=" + normal + " fast=" + fast);
+                    assertTrue(fast >= 1 && fast <= cpu, "fast out of range: " + fast);
+                }
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Fast load lifts a supported gen's ceiling on a many-core CPU")
+    void fastLoadRaisesCeiling() {
+        // Tiger Lake ceiling is 6; fast load lifts it to 8, so on 16 cores the
+        // count should climb above the normal cap.
+        int normal = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.BALANCED, 16, false);
+        int fast = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.BALANCED, 16, true);
+        assertTrue(fast > normal, "normal=" + normal + " fast=" + fast);
+    }
+
+    @Test
     @DisplayName("null profile is treated as BALANCED, never throws")
     void nullProfileIsBalanced() {
         int n = ChunkBuilderTuner.recommendedWorkers(IntelGpuGeneration.GEN12_XE_LP, null, 8);

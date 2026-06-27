@@ -42,15 +42,31 @@ public final class ChunkBuilderTuner {
      * count. Always {@code >= 1} and never more than the available CPUs.
      */
     public static int recommendedWorkers(IntelGpuGeneration gen, OptimizationProfile profile) {
+        return recommendedWorkers(gen, profile, false);
+    }
+
+    /**
+     * As {@link #recommendedWorkers(IntelGpuGeneration, OptimizationProfile)},
+     * but {@code fastLoad} raises throughput (more workers, higher ceiling) so
+     * chunks mesh and appear faster - used when "fast chunk loading" is on.
+     */
+    public static int recommendedWorkers(IntelGpuGeneration gen, OptimizationProfile profile,
+                                         boolean fastLoad) {
         int cpu = Math.max(1, Runtime.getRuntime().availableProcessors());
-        return recommendedWorkers(gen, profile, cpu);
+        return recommendedWorkers(gen, profile, cpu, fastLoad);
+    }
+
+    /** Back-compat / test entry point without the fast-load boost. */
+    static int recommendedWorkers(IntelGpuGeneration gen, OptimizationProfile profile, int cpu) {
+        return recommendedWorkers(gen, profile, cpu, false);
     }
 
     /**
      * Core algorithm, with the CPU count injected so it can be tested
      * deterministically across machine sizes.
      */
-    static int recommendedWorkers(IntelGpuGeneration gen, OptimizationProfile profile, int cpu) {
+    static int recommendedWorkers(IntelGpuGeneration gen, OptimizationProfile profile, int cpu,
+                                  boolean fastLoad) {
         cpu = Math.max(1, cpu);
         if (profile == null) profile = OptimizationProfile.BALANCED;
 
@@ -64,10 +80,17 @@ public final class ChunkBuilderTuner {
             case BALANCED:
             default:       target = cpu - 2;       break;
         }
+
+        int ceiling = ceilingFor(gen);
+        if (fastLoad) {
+            // Favour throughput: push toward "one core reserved" and lift the
+            // per-generation ceiling so meshing keeps up with fast loading.
+            target = Math.max(target, cpu - 1);
+            ceiling += 2;
+        }
         // Never drop below a usable floor, never exceed the core count.
         target = Math.max(2, Math.min(target, cpu));
 
-        int ceiling = ceilingFor(gen);
         return clamp(1, Math.min(target, ceiling), cpu);
     }
 

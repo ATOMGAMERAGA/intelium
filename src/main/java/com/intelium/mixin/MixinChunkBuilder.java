@@ -3,6 +3,7 @@ package com.intelium.mixin;
 import com.intelium.Intelium;
 import com.intelium.config.InteliumConfigIO;
 import com.intelium.optimization.ChunkBuilderTuner;
+import com.intelium.optimization.ChunkLoadingMode;
 import com.intelium.optimization.OptimizationProfile;
 import net.caffeinemc.mods.sodium.client.render.chunk.compile.executor.ChunkBuilder;
 import org.spongepowered.asm.mixin.Mixin;
@@ -34,7 +35,10 @@ public abstract class MixinChunkBuilder {
         if (desired <= 0) {
             OptimizationProfile profile =
                     OptimizationProfile.fromKey(InteliumConfigIO.get().profile);
-            desired = ChunkBuilderTuner.recommendedWorkers(Intelium.DETECTED_GENERATION, profile);
+            boolean fastLoad = ChunkLoadingMode
+                    .fromKey(InteliumConfigIO.get().chunkLoadingMode).boostsWorkers();
+            desired = ChunkBuilderTuner.recommendedWorkers(
+                    Intelium.DETECTED_GENERATION, profile, fastLoad);
         }
         if (desired >= 1) {
             cir.setReturnValue(desired);
