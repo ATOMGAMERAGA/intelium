@@ -22,7 +22,8 @@ import java.util.Locale;
  */
 public final class InteliumOverlay {
 
-    public static final FpsTracker TRACKER = new FpsTracker(20);
+    // ~10 seconds at 20 client ticks/second - long enough for a meaningful 1% low.
+    public static final FpsTracker TRACKER = new FpsTracker(200);
 
     private static final int PAD = 4;
     private static final int LINE_H = 10;
@@ -82,11 +83,24 @@ public final class InteliumOverlay {
     }
 
     private static List<Line> buildLines() {
+        InteliumConfig cfg = InteliumConfigIO.get();
         List<Line> lines = new ArrayList<>();
         lines.add(new Line(Text.translatable("intelium.hud.title"), CYAN));
 
         int fps = MinecraftClient.getInstance().getCurrentFps();
         lines.add(new Line(Text.translatable("intelium.hud.fps", fps), WHITE));
+
+        // Stutter line: 1% low + minimum over the rolling window. A big gap from
+        // the live FPS means hitches even when the headline number looks fine.
+        if (cfg.overlayShowLows && TRACKER.sampleCount() > 0) {
+            int low = TRACKER.onePercentLow();
+            lines.add(new Line(
+                    Text.translatable("intelium.hud.lows", low, TRACKER.min()),
+                    low < fps / 2 ? RED : GRAY));
+        }
+
+        // Compact mode stops here (title + FPS [+ lows]).
+        if (cfg.overlayCompact) return lines;
 
         AbBenchmark bench = AbBenchmark.INSTANCE;
         if (bench.isRunning()) {

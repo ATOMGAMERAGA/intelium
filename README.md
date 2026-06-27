@@ -6,8 +6,9 @@
 
 **Intelium** is a Fabric mod that tunes Sodium for Intel GPUs and gives you
 clear, in-game visibility into whether your GPU is supported. It applies a
-generation-aware chunk-build worker count and otherwise stays out of Sodium's
-way. On NVIDIA, AMD, unrecognized, or too-old Intel GPUs it disables itself
+generation- and profile-aware chunk-build worker count, plus a set of opt-in
+live render tweaks that cut per-frame GPU/CPU cost while you walk and look
+around. On NVIDIA, AMD, unrecognized, or too-old Intel GPUs it disables itself
 cleanly and Sodium runs unmodified.
 
 ## Branding assets
@@ -29,15 +30,20 @@ in `src/main/resources/assets/intelium/icon.png`.
 
 | Area | What Intelium does |
 |---|---|
-| Chunk build threading | Overrides Sodium's chunk-build worker count with a generation-aware value (lower on weak iGPUs, higher on Iris Xe / Arc). Honors a manual override. |
+| Chunk build threading | Overrides Sodium's chunk-build worker count with a generation- and profile-aware value. It scales with your CPU and reserves headroom for the render thread, so chunks keep up while you move (no hitch when new chunks enter view) without starving the frame. Honors a manual override. |
+| Live render tweaks | Opt-in caps on vanilla settings that cost real per-frame GPU/CPU time on weak iGPUs: entity render distance, particles, entity shadows, and biome blending. Each captures your original value and restores it when turned off. |
+| Optimization profile | **Max FPS / Balanced / Smooth** — shifts the chunk-worker trade-off toward peak frame rate or toward steady frame times while walking and turning. |
+| Stutter visibility | The overlay shows the **1% low** and **minimum** FPS over the last few seconds, so you can see hitches, not just the headline average. |
 | GPU detection | Identifies the exact Intel generation from the GL renderer string on both Windows drivers and Linux/Mesa, and reports support status in-game and in the log. |
 | Honest gating | Disables itself cleanly on NVIDIA / AMD / unrecognized / too-old GPUs. A Mixin config plugin checks each hook's Sodium target at load time, so any compatible Sodium version works and incompatible internals self-disable instead of crashing. |
 
-> **Why no draw-call batching / persistent buffers / occlusion culling?**
+> **Why these levers and not draw-call batching / persistent buffers?**
 > Sodium 0.8 already issues batched `glMultiDrawElementsIndirect` draws, manages
 > chunk geometry in a GPU memory arena, and performs occlusion culling.
-> Re-implementing those on top of Sodium is redundant and risks regressions or
-> crashes, so Intelium does not ship placebo switches for them.
+> Re-implementing those is redundant and risks regressions, so Intelium does not
+> ship placebo switches. Instead it pulls the levers Sodium leaves to the player
+> — entity distance, particles, shadows, biome blend, worker count — and wires
+> each to a real, reversible effect.
 
 Intelium auto-disables on NVIDIA, AMD, unrecognized, or unknown GPUs, and on
 Intel parts older than HD Graphics 520 (Gen 9 / Skylake, 2015). When disabled,
@@ -87,19 +93,42 @@ Settings are exposed inside Sodium's Video Settings screen under an
 **Intelium** page (Sodium 0.8 Config API). Persisted to
 `config/intelium.json`.
 
+Settings are split across two pages: **General** (core + render tweaks) and
+**Overlay & Test**.
+
+**General → Core**
+
 | Option | Default | Notes |
 |---|---|---|
 | Enable Intelium | `true` | Master switch. Greyed out when the GPU is unsupported. |
-| Chunk Build Workers | `Auto` | `0` / Auto = generation-aware default; `1–16` overrides Sodium's worker count directly. |
+| Optimization Profile | `Balanced` | **Max FPS** favors peak frame rate (fewer workers); **Smooth** favors stable frame times while moving (more workers); **Balanced** is the middle. |
+| Chunk Build Workers | `Auto` | `0` / Auto = generation- and profile-aware default; `1–16` overrides Sodium's worker count directly. |
+
+**General → Render Tweaks** (applied live to vanilla settings; your originals are restored when turned off)
+
+| Option | Default | Notes |
+|---|---|---|
+| Live Render Tweaks | `true` | Master switch for the four levers below. |
+| Max Entity Distance | `80%` | Caps how far entities render (50–100%; `Full` = untouched). Lower culls distant mobs/items — a real FPS win in crowded scenes. |
+| Limit Particles | `true` | Caps particles to *Decreased* (never overrides a stricter setting). |
+| Disable Entity Shadows | `false` | Turns off the round shadows under entities. |
+| Fast Biome Blend | `false` | Forces biome blend to 0. Biome blending runs on the chunk-build thread, so this makes meshing much cheaper and cuts hitches when chunks stream in. |
+
+**Overlay & Test**
+
+| Option | Default | Notes |
+|---|---|---|
 | FPS Test Overlay | `false` | Toggles the movable on-screen FPS panel. |
+| Compact Overlay | `false` | Show only the title + FPS (+ lows) lines. |
+| Show 1% Low / Min | `true` | Adds a stutter line: 1% low and minimum FPS over the last ~10s. |
 | Edit Overlay / Benchmark | button | Opens edit mode (drag to reposition) and runs the A/B benchmark. |
 | Supported GPUs | button | Opens an in-game list of supported generations and your detected GPU's status. |
 
-Changes apply live: toggling Intelium or changing the worker count rebuilds the
-chunk renderer immediately, so you see the effect without restarting. When the
-detected GPU (or Sodium build) is unsupported, every interactive option is
-greyed out and the reason is shown in the option tooltips and on the Supported
-GPUs screen.
+Changes apply live: toggling Intelium, changing the profile/worker count, or
+flipping a render tweak takes effect immediately (chunks rebuild where needed),
+so you see the effect without restarting. When the detected GPU (or Sodium
+build) is unsupported, every interactive option is greyed out and the reason is
+shown in the option tooltips and on the Supported GPUs screen.
 
 ### FPS test overlay
 
@@ -108,11 +137,13 @@ Enable **FPS Test Overlay** to show a movable panel with your live FPS. Open
 
 - **Drag** the panel anywhere on screen (position saves automatically).
 - **Run A/B Benchmark** — Intelium measures average FPS with its effect *on*,
-  then toggles it *off* (rebuilding chunks between windows) and measures again,
-  and reports both figures plus the gain. This is a real, measured comparison —
-  not an estimate. Because Intelium's effect is chunk-build threading, the gain
-  shows up most while terrain is loading; on a fully-built static scene the
-  delta can legitimately be near zero.
+  then toggles it *off* (restoring vanilla settings and rebuilding chunks between
+  windows) and measures again, and reports both figures plus the gain. This is a
+  real, measured comparison — not an estimate. Each phase uses a long warmup so
+  the chunk-rebuild spike passes *before* the measurement window opens, which
+  keeps the ON phase from being unfairly penalised. The gain reflects the active
+  render tweaks and worker count; on a fully-built static scene with no render
+  tweaks enabled the delta can legitimately be near zero.
 
 ## Building
 

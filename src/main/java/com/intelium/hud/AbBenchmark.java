@@ -20,8 +20,17 @@ public final class AbBenchmark {
 
     public enum Phase { IDLE, WARMUP_ON, MEASURE_ON, WARMUP_OFF, MEASURE_OFF, DONE }
 
-    /** Shared instance driven by the client tick; tests construct their own. */
-    public static final AbBenchmark INSTANCE = new AbBenchmark(1500L, 4000L);
+    /**
+     * Shared instance driven by the client tick; tests construct their own.
+     *
+     * <p>Each phase begins by toggling the effect and reloading chunks, which
+     * briefly tanks FPS while meshes rebuild. The warmup is deliberately long
+     * (4s) so that recovery spike passes <em>before</em> the measurement window
+     * opens - otherwise the ON phase (which always runs first, right after the
+     * click) is unfairly penalised and the "gain" reads negative even when the
+     * steady-state is identical.
+     */
+    public static final AbBenchmark INSTANCE = new AbBenchmark(4000L, 5000L);
 
     private final long warmupMs;
     private final long measureMs;

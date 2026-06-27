@@ -63,4 +63,46 @@ class FpsTrackerTest {
         assertEquals(0, t.sampleCount());
         assertEquals(0, t.smoothed());
     }
+
+    @Test
+    @DisplayName("min() returns the smallest sample in the window")
+    void minSample() {
+        FpsTracker t = new FpsTracker(8);
+        t.push(120);
+        t.push(30);
+        t.push(90);
+        assertEquals(30, t.min());
+    }
+
+    @Test
+    @DisplayName("min() of empty tracker is 0")
+    void minEmpty() {
+        assertEquals(0, new FpsTracker(8).min());
+    }
+
+    @Test
+    @DisplayName("onePercentLow averages the worst frames")
+    void onePercentLow() {
+        FpsTracker t = new FpsTracker(200);
+        for (int i = 0; i < 100; i++) t.push(100);
+        t.push(10); // one nasty hitch
+        // 1% of 101 samples = 2 worst frames: {10, 100} -> average 55
+        assertEquals(55, t.onePercentLow());
+    }
+
+    @Test
+    @DisplayName("onePercentLow of empty tracker is 0")
+    void onePercentLowEmpty() {
+        assertEquals(0, new FpsTracker(200).onePercentLow());
+    }
+
+    @Test
+    @DisplayName("lowAverage always includes at least one sample")
+    void lowAverageAtLeastOne() {
+        FpsTracker t = new FpsTracker(10);
+        t.push(60);
+        t.push(20);
+        // fraction tiny -> ceil(2 * 1e-9) = 1 -> just the single worst frame
+        assertEquals(20, t.lowAverage(1e-9));
+    }
 }

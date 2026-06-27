@@ -21,6 +21,9 @@ public class InteliumClientInit implements ClientModInitializer {
     public void onInitializeClient() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             IntelGpuDetector.detectOnce();
+            // Keep the live render tweaks reconciled with the config. Cheap: it
+            // only writes a game option when the value actually differs.
+            RenderTweaks.apply();
             int fps = client.getCurrentFps();
             InteliumOverlay.TRACKER.push(fps);
             AbBenchmark.INSTANCE.tick(System.currentTimeMillis(), fps);

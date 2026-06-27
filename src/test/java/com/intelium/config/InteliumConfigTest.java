@@ -72,15 +72,48 @@ class InteliumConfigTest {
     }
 
     @Test
-    @DisplayName("Five public instance fields: enabled, workers, overlay x3 (no placebo toggles)")
-    void fieldCount() {
-        int publicFields = 0;
-        for (var f : InteliumConfig.class.getDeclaredFields()) {
-            if (java.lang.reflect.Modifier.isPublic(f.getModifiers())
-                    && !java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
-                publicFields++;
+    @DisplayName("All settings fields are public, non-static (for GSON) - no placebos")
+    void allFieldsArePublicSettings() {
+        // Every field is a real, wired setting. They must all be public &
+        // non-static so Gson can persist them.
+        String[] expected = {
+                "enabled", "profile", "chunkBuildWorkers",
+                "tuneFrameSettings", "maxEntityDistancePercent", "limitParticles",
+                "disableEntityShadows", "fastBiomeBlend",
+                "overlayEnabled", "overlayCompact", "overlayShowLows",
+                "overlayX", "overlayY"
+        };
+        for (String name : expected) {
+            try {
+                var f = InteliumConfig.class.getDeclaredField(name);
+                assertTrue(java.lang.reflect.Modifier.isPublic(f.getModifiers()), name + " public");
+                assertFalse(java.lang.reflect.Modifier.isStatic(f.getModifiers()), name + " non-static");
+            } catch (NoSuchFieldException e) {
+                fail("missing settings field: " + name);
             }
         }
-        assertEquals(5, publicFields);
+        long publicFields = java.util.Arrays.stream(InteliumConfig.class.getDeclaredFields())
+                .filter(f -> java.lang.reflect.Modifier.isPublic(f.getModifiers())
+                        && !java.lang.reflect.Modifier.isStatic(f.getModifiers()))
+                .count();
+        assertEquals(expected.length, publicFields,
+                "every public field must be a known setting");
+    }
+
+    @Test
+    @DisplayName("Default profile is balanced")
+    void defaultProfile() {
+        assertEquals("balanced", new InteliumConfig().profile);
+    }
+
+    @Test
+    @DisplayName("Default live render tweaks: master on, entity distance capped, particles limited")
+    void defaultRenderTweaks() {
+        InteliumConfig c = new InteliumConfig();
+        assertTrue(c.tuneFrameSettings);
+        assertEquals(80, c.maxEntityDistancePercent);
+        assertTrue(c.limitParticles);
+        assertFalse(c.disableEntityShadows);
+        assertFalse(c.fastBiomeBlend);
     }
 }
