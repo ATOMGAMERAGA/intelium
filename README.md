@@ -53,14 +53,19 @@ settings and on the in-game **Supported GPUs** screen.
 
 ## Requirements
 
-- Minecraft **1.21.11**
+Intelium ships as **two jars**, one per Minecraft line. Each GitHub release
+contains both; pick the one matching your Minecraft version.
+
+| Jar | Minecraft | Java | Renderer | Sodium |
+|---|---|---|---|---|
+| `Intelium-v1.2.0-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
+| `Intelium-v1.2.0-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
+
 - Fabric Loader **0.18.3+**
 - Fabric API
-- **Sodium 0.8.0 or newer** — any version compatible with your Minecraft. Intelium
-  does not cap the Sodium version: if a newer Sodium changes the internals a hook
-  relies on, that hook self-disables cleanly (no crash) and everything else keeps
-  working.
-- Java 21
+- **Sodium** — any version compatible with your Minecraft. Intelium does not cap
+  the Sodium version: if a newer Sodium changes the internals a hook relies on,
+  that hook self-disables cleanly (no crash) and everything else keeps working.
 - An Intel GPU (HD 520 / Gen 9 Skylake or newer)
 
 ## Supported Intel generations
@@ -149,11 +154,30 @@ Enable **FPS Test Overlay** to show a movable panel with your live FPS. Open
 
 ## Building
 
+The repo is split by Minecraft line, with shared, version-agnostic logic in
+`shared/`:
+
+- `mc1.21.11/` — the 1.21.11 build (Yarn mappings, Loom, Java 21).
+- `mc26/` — the 26.x build (official Mojang mappings, the non-remapping
+  `net.fabricmc.fabric-loom` plugin, Java 25).
+- `shared/` — pure logic (GPU classifier, config, optimization math, HUD math,
+  mod-compat) compiled into both, with its unit tests.
+
 ```bash
-./gradlew build
+# 1.21.11 jar (needs JDK 21)
+./mc1.21.11/gradlew -p mc1.21.11 build
+
+# 26.x jar (needs JDK 25)
+./mc26/gradlew -p mc26 build
 ```
 
-The mod jar lands in `build/libs/intelium-<version>.jar`.
+Each jar lands in `<target>/build/libs/intelium-<version>.jar`. CI builds both
+and attaches them to a single GitHub release.
+
+## Author & links
+
+Made by **ATOMLAND Studios**. Download page:
+<https://modrinth.com/mod/intelium-mod>
 
 ## License
 
