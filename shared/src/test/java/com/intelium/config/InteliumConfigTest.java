@@ -80,8 +80,11 @@ class InteliumConfigTest {
                 "enabled", "profile", "chunkBuildWorkers", "chunkLoadingMode",
                 "tuneFrameSettings", "maxEntityDistancePercent", "limitParticles",
                 "disableEntityShadows", "fastBiomeBlend",
+                "cloudsMode", "fastGraphics", "disableSmoothLighting",
+                "disableVsync", "maxRenderDistance",
                 "overlayEnabled", "overlayCompact", "overlayShowLows",
-                "overlayX", "overlayY"
+                "overlayShowFrameTime", "overlayX", "overlayY",
+                "captured"
         };
         for (String name : expected) {
             try {
@@ -121,5 +124,80 @@ class InteliumConfigTest {
         assertTrue(c.limitParticles);
         assertFalse(c.disableEntityShadows);
         assertFalse(c.fastBiomeBlend);
+    }
+
+    @Test
+    @DisplayName("Default GPU savers: everything hands-off (no visual surprises)")
+    void defaultGpuSavers() {
+        InteliumConfig c = new InteliumConfig();
+        assertEquals("default", c.cloudsMode);
+        assertFalse(c.fastGraphics);
+        assertFalse(c.disableSmoothLighting);
+        assertFalse(c.disableVsync);
+        assertEquals(0, c.maxRenderDistance);
+    }
+
+    @Test
+    @DisplayName("Restore cache starts present and empty")
+    void capturedStartsEmpty() {
+        InteliumConfig c = new InteliumConfig();
+        assertNotNull(c.captured);
+        assertNull(c.captured.entityDistance);
+        assertNull(c.captured.particles);
+        assertNull(c.captured.clouds);
+        assertNull(c.captured.graphics);
+        assertNull(c.captured.smoothLighting);
+        assertNull(c.captured.vsync);
+        assertNull(c.captured.renderDistance);
+        assertNull(c.captured.sodiumDeferMode);
+    }
+
+    @Test
+    @DisplayName("sanitize clamps out-of-range values and heals nulls")
+    void sanitizeClampsAndHeals() {
+        InteliumConfig c = new InteliumConfig();
+        c.profile = null;
+        c.chunkLoadingMode = null;
+        c.cloudsMode = null;
+        c.chunkBuildWorkers = 99;
+        c.maxEntityDistancePercent = 5;
+        c.maxRenderDistance = 1;
+        c.overlayX = -100;
+        c.overlayY = -1;
+        c.captured = null;
+
+        InteliumConfig.sanitize(c);
+
+        assertEquals("balanced", c.profile);
+        assertEquals("fast", c.chunkLoadingMode);
+        assertEquals("default", c.cloudsMode);
+        assertEquals(16, c.chunkBuildWorkers);
+        assertEquals(50, c.maxEntityDistancePercent);
+        assertEquals(2, c.maxRenderDistance);
+        assertEquals(0, c.overlayX);
+        assertEquals(0, c.overlayY);
+        assertNotNull(c.captured);
+    }
+
+    @Test
+    @DisplayName("sanitize keeps valid values untouched")
+    void sanitizeKeepsValid() {
+        InteliumConfig c = new InteliumConfig();
+        c.maxRenderDistance = 12;
+        c.maxEntityDistancePercent = 75;
+        c.chunkBuildWorkers = 4;
+        InteliumConfig.sanitize(c);
+        assertEquals(12, c.maxRenderDistance);
+        assertEquals(75, c.maxEntityDistancePercent);
+        assertEquals(4, c.chunkBuildWorkers);
+    }
+
+    @Test
+    @DisplayName("sanitize maps zero/negative render-distance cap to 'no cap'")
+    void sanitizeRenderDistanceOff() {
+        InteliumConfig c = new InteliumConfig();
+        c.maxRenderDistance = -5;
+        InteliumConfig.sanitize(c);
+        assertEquals(0, c.maxRenderDistance);
     }
 }

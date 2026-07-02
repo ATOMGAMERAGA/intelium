@@ -90,6 +90,15 @@ public final class InteliumOverlay {
         int fps = MinecraftClient.getInstance().getCurrentFps();
         lines.add(new Line(Text.translatable("intelium.hud.fps", fps), WHITE));
 
+        // Frame-time line: current and rolling-average milliseconds per frame.
+        // Frame time makes small hitches visible that an FPS number rounds away.
+        if (cfg.overlayShowFrameTime) {
+            int avg = TRACKER.smoothed();
+            lines.add(new Line(Text.translatable("intelium.hud.frametime",
+                    fmt(fps > 0 ? 1000.0 / fps : 0.0),
+                    fmt(avg > 0 ? 1000.0 / avg : 0.0)), GRAY));
+        }
+
         // Stutter line: 1% low + minimum over the rolling window. A big gap from
         // the live FPS means hitches even when the headline number looks fine.
         if (cfg.overlayShowLows && TRACKER.sampleCount() > 0) {

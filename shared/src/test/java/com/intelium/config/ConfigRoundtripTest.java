@@ -119,4 +119,63 @@ class ConfigRoundtripTest {
         String json = GSON.toJson(new InteliumConfig());
         assertTrue(json.contains("\n"));
     }
+
+    @Test
+    @DisplayName("New GPU-saver settings round-trip identically")
+    void gpuSaversRoundtrip() {
+        InteliumConfig original = new InteliumConfig();
+        original.cloudsMode = "off";
+        original.fastGraphics = true;
+        original.disableSmoothLighting = true;
+        original.disableVsync = true;
+        original.maxRenderDistance = 10;
+        original.overlayShowFrameTime = true;
+
+        InteliumConfig parsed = GSON.fromJson(GSON.toJson(original), InteliumConfig.class);
+
+        assertEquals("off", parsed.cloudsMode);
+        assertTrue(parsed.fastGraphics);
+        assertTrue(parsed.disableSmoothLighting);
+        assertTrue(parsed.disableVsync);
+        assertEquals(10, parsed.maxRenderDistance);
+        assertTrue(parsed.overlayShowFrameTime);
+    }
+
+    @Test
+    @DisplayName("Restore cache round-trips (originals survive a restart)")
+    void capturedRoundtrip() {
+        InteliumConfig original = new InteliumConfig();
+        original.captured.entityDistance = 1.0;
+        original.captured.particles = "ALL";
+        original.captured.clouds = "FANCY";
+        original.captured.vsync = true;
+        original.captured.renderDistance = 16;
+        original.captured.sodiumDeferMode = "ALWAYS";
+
+        InteliumConfig parsed = GSON.fromJson(GSON.toJson(original), InteliumConfig.class);
+
+        assertNotNull(parsed.captured);
+        assertEquals(1.0, parsed.captured.entityDistance);
+        assertEquals("ALL", parsed.captured.particles);
+        assertEquals("FANCY", parsed.captured.clouds);
+        assertEquals(Boolean.TRUE, parsed.captured.vsync);
+        assertEquals(16, parsed.captured.renderDistance);
+        assertEquals("ALWAYS", parsed.captured.sodiumDeferMode);
+        // Untouched levers stay null (= "not managing").
+        assertNull(parsed.captured.entityShadows);
+        assertNull(parsed.captured.graphics);
+    }
+
+    @Test
+    @DisplayName("Config from an older Intelium build (no new keys) parses with safe defaults")
+    void oldConfigGetsNewDefaults() {
+        InteliumConfig parsed = InteliumConfig.sanitize(GSON.fromJson(
+                "{\"enabled\":true,\"profile\":\"smooth\",\"chunkBuildWorkers\":3}",
+                InteliumConfig.class));
+        assertEquals("default", parsed.cloudsMode);
+        assertFalse(parsed.fastGraphics);
+        assertFalse(parsed.disableVsync);
+        assertEquals(0, parsed.maxRenderDistance);
+        assertNotNull(parsed.captured);
+    }
 }

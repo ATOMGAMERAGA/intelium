@@ -1,8 +1,10 @@
 package com.intelium.client;
 
 import com.intelium.IntelGpuDetector;
+import com.intelium.Intelium;
 import com.intelium.client.hud.InteliumOverlay;
 import com.intelium.compat.ModCompat;
+import com.intelium.config.InteliumConfigIO;
 import com.intelium.hud.AbBenchmark;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -20,6 +22,11 @@ public class InteliumClientInit implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        // Honour the persisted master switch from the very first frame. Without
+        // this, a user who disabled Intelium got it silently re-enabled on the
+        // next launch (IS_ENABLED was only written by the settings screen).
+        Intelium.IS_ENABLED = InteliumConfigIO.get().enabled;
+
         // Report any companion performance mods (AsyncParticles, GPUTape) once,
         // so logs make the compatibility behaviour visible.
         ModCompat.logOnce();
