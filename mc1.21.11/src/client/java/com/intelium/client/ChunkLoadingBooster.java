@@ -29,8 +29,6 @@ public final class ChunkLoadingBooster {
 
     /** Set false the first time Sodium's internals can't be reached. */
     private static volatile boolean available = true;
-    /** The user's original Sodium defer mode, captured before we change it. */
-    private static DeferMode original;
 
     /**
      * Reconciles Sodium's defer mode with the configured chunk-loading mode.
@@ -55,19 +53,37 @@ public final class ChunkLoadingBooster {
                 ? ChunkLoadingMode.fromKey(InteliumConfigIO.get().chunkLoadingMode)
                 : ChunkLoadingMode.OFF;
 
+        // The captured original is persisted in intelium.json (not a static):
+        // Sodium saves the overridden value into its own config file, so without
+        // persistence the user's real defer mode would be lost across a restart.
+        var cap = InteliumConfigIO.get().captured;
+
         if (mode == ChunkLoadingMode.OFF) {
             // Restore the user's setting if we previously changed it.
-            if (original != null) {
-                setIfChanged(opts, original);
-                original = null;
+            if (cap.sodiumDeferMode != null) {
+                setIfChanged(opts, parseDeferMode(cap.sodiumDeferMode,
+                        opts.performance.chunkBuildDeferMode));
+                cap.sodiumDeferMode = null;
+                InteliumConfigIO.flush();
             }
             return;
         }
 
-        if (original == null) original = opts.performance.chunkBuildDeferMode;
+        if (cap.sodiumDeferMode == null) {
+            cap.sodiumDeferMode = opts.performance.chunkBuildDeferMode.name();
+            InteliumConfigIO.flush();
+        }
         setIfChanged(opts, mode == ChunkLoadingMode.TURBO
                 ? DeferMode.ZERO_FRAMES
                 : DeferMode.ONE_FRAME);
+    }
+
+    private static DeferMode parseDeferMode(String name, DeferMode fallback) {
+        try {
+            return DeferMode.valueOf(name);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            return fallback;
+        }
     }
 
     private static void setIfChanged(SodiumOptions opts, DeferMode value) {

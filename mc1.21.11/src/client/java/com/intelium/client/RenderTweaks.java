@@ -4,8 +4,11 @@ import com.intelium.Intelium;
 import com.intelium.compat.ModCompat;
 import com.intelium.config.InteliumConfig;
 import com.intelium.config.InteliumConfigIO;
+import com.intelium.optimization.CloudsMode;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.option.CloudRenderMode;
 import net.minecraft.client.option.GameOptions;
+import net.minecraft.client.option.GraphicsMode;
 import net.minecraft.client.option.SimpleOption;
 import net.minecraft.particle.ParticlesMode;
 
@@ -13,13 +16,20 @@ import net.minecraft.particle.ParticlesMode;
  * Applies Intelium's live render tweaks to the vanilla {@link GameOptions}.
  *
  * <p>These are the levers that cut per-frame GPU/CPU cost while you walk and
- * look around (entity draw distance, particles, entity shadows, biome blend) -
- * the things a chunk-worker tweak alone cannot touch. Each is opt-in; when a
- * lever is on, Intelium captures the user's original value once and forces its
- * own; when the lever (or Intelium itself) is turned off, the captured value is
- * restored. Values are only written when they actually differ, so the (sometimes
+ * look around (entity draw distance, particles, entity shadows, biome blend,
+ * clouds, graphics mode, smooth lighting, VSync, render distance) - the things
+ * a chunk-worker tweak alone cannot touch. Each is opt-in; when a lever is on,
+ * Intelium captures the user's original value once and forces its own; when the
+ * lever (or Intelium itself) is turned off, the captured value is restored.
+ * Values are only written when they actually differ, so the (sometimes
  * expensive) vanilla change-callbacks fire at most once per transition - never
  * every tick.
+ *
+ * <p>Captured originals live in the persisted config ({@code cfg.captured}),
+ * not in static fields: vanilla saves the <em>forced</em> values into
+ * {@code options.txt} on quit, so without persistence the user's real settings
+ * would be lost across a restart. With it, turning a lever off always restores
+ * what the user actually had.
  *
  * <p>All access happens on the client/render thread (apply hooks and the client
  * tick), where touching {@code GameOptions} is safe.
@@ -28,14 +38,10 @@ public final class RenderTweaks {
 
     private RenderTweaks() {}
 
-    // Captured originals. null == "not currently managing this lever".
-    private static Double origEntityDistance;
-    private static ParticlesMode origParticles;
-    private static Boolean origEntityShadows;
-    private static Integer origBiomeBlend;
-
     /** Lowest entity-distance scaling vanilla allows (50%). */
     private static final double MIN_ENTITY_SCALE = 0.5;
+    /** Vanilla render-distance bounds, in chunks. */
+    private static final int MIN_RENDER_DISTANCE = 2;
 
     /**
      * Reconciles the live game options with the current config. Safe to call
@@ -47,71 +53,237 @@ public final class RenderTweaks {
         GameOptions o = mc.options;
 
         InteliumConfig cfg = InteliumConfigIO.get();
+        InteliumConfig.CapturedOptions cap = cfg.captured;
         boolean master = Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE && cfg.tuneFrameSettings;
 
-        applyEntityDistance(o, master && cfg.maxEntityDistancePercent < 100,
+        boolean dirty = false;
+        dirty |= applyEntityDistance(o, cap, master && cfg.maxEntityDistancePercent < 100,
                 clampPercent(cfg.maxEntityDistancePercent) / 100.0);
         // Yield particle control to AsyncParticles when it is installed, so we
         // never fight its async pipeline (it warns about particle-mod overlap).
         // When it is absent, this restores any value Intelium previously managed.
-        applyParticles(o, master && cfg.limitParticles && !ModCompat.asyncParticlesPresent());
-        applyEntityShadows(o, master && cfg.disableEntityShadows);
-        applyBiomeBlend(o, master && cfg.fastBiomeBlend);
+        dirty |= applyParticles(o, cap,
+                master && cfg.limitParticles && !ModCompat.asyncParticlesPresent());
+        dirty |= applyEntityShadows(o, cap, master && cfg.disableEntityShadows);
+        dirty |= applyBiomeBlend(o, cap, master && cfg.fastBiomeBlend);
+        dirty |= applyClouds(o, cap, master ? CloudsMode.fromKey(cfg.cloudsMode)
+                                            : CloudsMode.DEFAULT);
+        dirty |= applyGraphics(o, cap, master && cfg.fastGraphics);
+        dirty |= applySmoothLighting(o, cap, master && cfg.disableSmoothLighting);
+        dirty |= applyVsync(o, cap, master && cfg.disableVsync);
+        dirty |= applyRenderDistance(o, cap, master && cfg.maxRenderDistance > 0,
+                cfg.maxRenderDistance);
+
+        // Persist capture/restore transitions so originals survive a restart.
+        if (dirty) InteliumConfigIO.flush();
     }
 
-    private static void applyEntityDistance(GameOptions o, boolean on, double cap) {
+    private static boolean applyEntityDistance(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                               boolean on, double capValue) {
         SimpleOption<Double> opt = o.getEntityDistanceScaling();
         if (on) {
-            if (origEntityDistance == null) origEntityDistance = opt.getValue();
-            double target = Math.max(MIN_ENTITY_SCALE, cap);
+            boolean captured = false;
+            if (cap.entityDistance == null) {
+                cap.entityDistance = opt.getValue();
+                captured = true;
+            }
+            double target = Math.max(MIN_ENTITY_SCALE, capValue);
             // Only cap downward; never raise a value the user already set lower.
-            double desired = Math.min(origEntityDistance, target);
-            setIfChanged(opt, desired);
-        } else if (origEntityDistance != null) {
-            setIfChanged(opt, origEntityDistance);
-            origEntityDistance = null;
+            setIfChanged(opt, Math.min(cap.entityDistance, target));
+            return captured;
+        } else if (cap.entityDistance != null) {
+            setIfChanged(opt, cap.entityDistance);
+            cap.entityDistance = null;
+            return true;
         }
+        return false;
     }
 
-    private static void applyParticles(GameOptions o, boolean on) {
+    private static boolean applyParticles(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                          boolean on) {
         SimpleOption<ParticlesMode> opt = o.getParticles();
         if (on) {
-            if (origParticles == null) origParticles = opt.getValue();
+            boolean captured = false;
+            if (cap.particles == null) {
+                cap.particles = opt.getValue().name();
+                captured = true;
+            }
             // Cap to DECREASED, but don't loosen a stricter (MINIMAL) setting.
             if (opt.getValue() == ParticlesMode.ALL) {
                 setIfChanged(opt, ParticlesMode.DECREASED);
             }
-        } else if (origParticles != null) {
-            setIfChanged(opt, origParticles);
-            origParticles = null;
+            return captured;
+        } else if (cap.particles != null) {
+            setIfChanged(opt, parseEnum(ParticlesMode.class, cap.particles, opt.getValue()));
+            cap.particles = null;
+            return true;
         }
+        return false;
     }
 
-    private static void applyEntityShadows(GameOptions o, boolean on) {
+    private static boolean applyEntityShadows(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                              boolean on) {
         SimpleOption<Boolean> opt = o.getEntityShadows();
         if (on) {
-            if (origEntityShadows == null) origEntityShadows = opt.getValue();
+            boolean captured = false;
+            if (cap.entityShadows == null) {
+                cap.entityShadows = opt.getValue();
+                captured = true;
+            }
             setIfChanged(opt, Boolean.FALSE);
-        } else if (origEntityShadows != null) {
-            setIfChanged(opt, origEntityShadows);
-            origEntityShadows = null;
+            return captured;
+        } else if (cap.entityShadows != null) {
+            setIfChanged(opt, cap.entityShadows);
+            cap.entityShadows = null;
+            return true;
         }
+        return false;
     }
 
-    private static void applyBiomeBlend(GameOptions o, boolean on) {
+    private static boolean applyBiomeBlend(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                           boolean on) {
         SimpleOption<Integer> opt = o.getBiomeBlendRadius();
         if (on) {
-            if (origBiomeBlend == null) origBiomeBlend = opt.getValue();
+            boolean captured = false;
+            if (cap.biomeBlend == null) {
+                cap.biomeBlend = opt.getValue();
+                captured = true;
+            }
             setIfChanged(opt, 0);
-        } else if (origBiomeBlend != null) {
-            setIfChanged(opt, origBiomeBlend);
-            origBiomeBlend = null;
+            return captured;
+        } else if (cap.biomeBlend != null) {
+            setIfChanged(opt, cap.biomeBlend);
+            cap.biomeBlend = null;
+            return true;
         }
+        return false;
+    }
+
+    private static boolean applyClouds(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                       CloudsMode mode) {
+        SimpleOption<CloudRenderMode> opt = o.getCloudRenderMode();
+        if (mode != CloudsMode.DEFAULT) {
+            boolean captured = false;
+            if (cap.clouds == null) {
+                cap.clouds = opt.getValue().name();
+                captured = true;
+            }
+            if (mode == CloudsMode.OFF) {
+                setIfChanged(opt, CloudRenderMode.OFF);
+            } else if (opt.getValue() == CloudRenderMode.FANCY) {
+                // FAST caps volumetric clouds to flat; never raises OFF.
+                setIfChanged(opt, CloudRenderMode.FAST);
+            }
+            return captured;
+        } else if (cap.clouds != null) {
+            setIfChanged(opt, parseEnum(CloudRenderMode.class, cap.clouds, opt.getValue()));
+            cap.clouds = null;
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean applyGraphics(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                         boolean on) {
+        // 1.21.11 split the old Graphics option into individual settings; the
+        // "preset" option (Fast / Fancy / Fabulous / Custom) applies them as a
+        // group, which is exactly the lever we want.
+        SimpleOption<GraphicsMode> opt = o.getPreset();
+        if (on) {
+            // Never touch a hand-tuned CUSTOM mix: forcing Fast would overwrite
+            // the user's individual choices in a way a restore cannot undo.
+            if (cap.graphics == null && opt.getValue() == GraphicsMode.CUSTOM) return false;
+            boolean captured = false;
+            if (cap.graphics == null) {
+                cap.graphics = opt.getValue().name();
+                captured = true;
+            }
+            // Only step down Fancy/Fabulous. If the user tweaks an individual
+            // option while this lever is on (the preset flips to CUSTOM), leave
+            // their mix alone instead of stomping it back to Fast every tick.
+            if (opt.getValue() == GraphicsMode.FANCY || opt.getValue() == GraphicsMode.FABULOUS) {
+                setIfChanged(opt, GraphicsMode.FAST);
+            }
+            return captured;
+        } else if (cap.graphics != null) {
+            setIfChanged(opt, parseEnum(GraphicsMode.class, cap.graphics, opt.getValue()));
+            cap.graphics = null;
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean applySmoothLighting(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                               boolean on) {
+        SimpleOption<Boolean> opt = o.getAo();
+        if (on) {
+            boolean captured = false;
+            if (cap.smoothLighting == null) {
+                cap.smoothLighting = opt.getValue();
+                captured = true;
+            }
+            setIfChanged(opt, Boolean.FALSE);
+            return captured;
+        } else if (cap.smoothLighting != null) {
+            setIfChanged(opt, cap.smoothLighting);
+            cap.smoothLighting = null;
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean applyVsync(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                      boolean on) {
+        SimpleOption<Boolean> opt = o.getEnableVsync();
+        if (on) {
+            boolean captured = false;
+            if (cap.vsync == null) {
+                cap.vsync = opt.getValue();
+                captured = true;
+            }
+            setIfChanged(opt, Boolean.FALSE);
+            return captured;
+        } else if (cap.vsync != null) {
+            setIfChanged(opt, cap.vsync);
+            cap.vsync = null;
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean applyRenderDistance(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                               boolean on, int maxChunks) {
+        SimpleOption<Integer> opt = o.getViewDistance();
+        if (on) {
+            boolean captured = false;
+            if (cap.renderDistance == null) {
+                cap.renderDistance = opt.getValue();
+                captured = true;
+            }
+            int target = Math.max(MIN_RENDER_DISTANCE, maxChunks);
+            // Only cap downward; never raise a distance the user set lower.
+            setIfChanged(opt, Math.min(cap.renderDistance, target));
+            return captured;
+        } else if (cap.renderDistance != null) {
+            setIfChanged(opt, cap.renderDistance);
+            cap.renderDistance = null;
+            return true;
+        }
+        return false;
     }
 
     private static <T> void setIfChanged(SimpleOption<T> opt, T value) {
         if (!java.util.Objects.equals(opt.getValue(), value)) {
             opt.setValue(value);
+        }
+    }
+
+    /** Parses a persisted enum name, falling back when the name is unknown. */
+    private static <E extends Enum<E>> E parseEnum(Class<E> type, String name, E fallback) {
+        try {
+            return Enum.valueOf(type, name);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            return fallback;
         }
     }
 

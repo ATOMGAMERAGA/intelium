@@ -64,6 +64,43 @@ public class InteliumConfig {
      */
     public boolean fastBiomeBlend = false;
 
+    /**
+     * Cloud handling: {@code "default"} (don't touch), {@code "fast"} (cap
+     * fancy/volumetric clouds to flat) or {@code "off"} (no clouds). Clouds are
+     * a translucent layer redrawn every frame - pure overdraw on an iGPU. See
+     * {@code CloudsMode}.
+     */
+    public String cloudsMode = "default";
+
+    /**
+     * Force the vanilla Graphics setting to "Fast" (fast leaves, simpler
+     * weather/translucency). One of the biggest single levers on a weak iGPU;
+     * off by default because it visibly changes how the game looks.
+     */
+    public boolean fastGraphics = false;
+
+    /**
+     * Turn off smooth lighting (ambient occlusion). Skips the per-vertex AO
+     * darkening done during chunk meshing - cheaper chunk builds and slightly
+     * cheaper frames, at a visible cost. Off by default.
+     */
+    public boolean disableSmoothLighting = false;
+
+    /**
+     * Force VSync off while Intelium is active, uncapping the frame rate from
+     * the display's refresh rate. Off by default (some users want the cap);
+     * the user's own VSync choice is restored when turned off.
+     */
+    public boolean disableVsync = false;
+
+    /**
+     * Cap on the vanilla render distance, in chunks. {@code 0} means "do not
+     * touch". A positive value caps the user's render distance downward (never
+     * raises it) - fewer chunk sections to build, upload and draw every frame,
+     * the single most reliable FPS lever there is.
+     */
+    public int maxRenderDistance = 0;
+
     // ---- FPS test overlay ------------------------------------------------
 
     /** Whether the movable on-screen FPS test overlay is shown. */
@@ -75,7 +112,61 @@ public class InteliumConfig {
     /** Show the 1% low / minimum FPS line (a stutter indicator). */
     public boolean overlayShowLows = true;
 
+    /** Show the frame-time line (current and rolling-average milliseconds). */
+    public boolean overlayShowFrameTime = false;
+
     /** Overlay top-left position, in scaled GUI pixels. Set by drag/edit mode. */
     public int overlayX = 4;
     public int overlayY = 4;
+
+    // ---- Restore cache -----------------------------------------------------
+
+    /**
+     * The user's own option values, captured the moment a lever first forces a
+     * setting and cleared when it is restored. Persisted so that "turn the
+     * lever off" still restores the <em>user's</em> value even across a game
+     * restart - without this, the forced value would be saved into
+     * {@code options.txt} on quit and silently become the new "original".
+     * Enum values are stored by name so the cache stays version-tolerant.
+     */
+    public CapturedOptions captured = new CapturedOptions();
+
+    /** Nullable captured originals; {@code null} = "not managing this lever". */
+    public static class CapturedOptions {
+        public Double entityDistance;
+        public String particles;
+        public Boolean entityShadows;
+        public Integer biomeBlend;
+        public String clouds;
+        public String graphics;
+        public Boolean smoothLighting;
+        public Boolean vsync;
+        public Integer renderDistance;
+        /** Sodium's chunk-build defer mode (fast chunk loading lever). */
+        public String sodiumDeferMode;
+    }
+
+    /**
+     * Clamps values into their valid ranges and replaces nulls with defaults,
+     * so a hand-edited or truncated config file cannot misconfigure the mod.
+     * Returns the same instance for chaining. Pure logic - unit-testable.
+     */
+    public static InteliumConfig sanitize(InteliumConfig cfg) {
+        InteliumConfig defaults = new InteliumConfig();
+        if (cfg.profile == null) cfg.profile = defaults.profile;
+        if (cfg.chunkLoadingMode == null) cfg.chunkLoadingMode = defaults.chunkLoadingMode;
+        if (cfg.cloudsMode == null) cfg.cloudsMode = defaults.cloudsMode;
+        cfg.chunkBuildWorkers = clamp(cfg.chunkBuildWorkers, 0, 16);
+        cfg.maxEntityDistancePercent = clamp(cfg.maxEntityDistancePercent, 50, 100);
+        cfg.maxRenderDistance = cfg.maxRenderDistance <= 0
+                ? 0 : clamp(cfg.maxRenderDistance, 2, 32);
+        cfg.overlayX = Math.max(0, cfg.overlayX);
+        cfg.overlayY = Math.max(0, cfg.overlayY);
+        if (cfg.captured == null) cfg.captured = new CapturedOptions();
+        return cfg;
+    }
+
+    private static int clamp(int v, int lo, int hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
 }

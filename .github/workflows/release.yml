@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INTELIUM_VERSION: "1.2.0"
+  INTELIUM_VERSION: "1.2.1"
 
 jobs:
   build:
@@ -36,11 +36,11 @@ jobs:
           - target: mc1.21.11
             java: '21'
             label: '1.21.11'
-            jarname: 'Intelium-v1.2.0-1.21.11.jar'
+            jarname: 'Intelium-v1.2.1-1.21.11.jar'
           - target: mc26
             java: '25'
             label: '26.x'
-            jarname: 'Intelium-v1.2.0-26.x.jar'
+            jarname: 'Intelium-v1.2.1-26.x.jar'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,25 +131,43 @@ jobs:
             ````markdown
             ## English
 
-            Multi-version release: Intelium now supports Minecraft **1.21.11** and the **26.x** line (26.1, 26.1.1, 26.1.2, 26.2), including 26.2's new Vulkan renderer.
+            Polish release: five new real FPS levers, a smarter overlay, and important bug fixes. Supports Minecraft **1.21.11** and the **26.x** line (26.1 → 26.2, including the Vulkan renderer).
 
-            - **Two jars, one per Minecraft line.** Pick `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) or `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). The 26.x jar runs on 26.1 → 26.2 and adapts to the Sodium version present.
-            - **Built on the latest Sodium APIs** for each version (Sodium 0.8.x on 1.21.11, 0.8.x/0.9.x on the 26.x line) using official 26.x mappings.
-            - **More FPS, safely:** generation- and profile-aware chunk-build worker count, fast chunk loading (Sodium defer-mode override), and live render tweaks (entity distance, particles, entity shadows, biome blend).
-            - **Plays nice with GPU mods:** verified no conflict with GPUTape and AsyncParticles — Intelium never touches GL/Vulkan buffers, and it steps aside on the particle setting when AsyncParticles is installed.
-            - **Languages:** full Türkçe and American English; any English variant and any other locale fall back to American English automatically.
-            - Note: on 26.x, the movable FPS overlay and custom screens are temporarily omitted (Minecraft 26 reworked its GUI for Vulkan); the core optimizations and the Sodium settings page are fully functional.
+            ### New settings — a whole "GPU Savers" group
+            Every option is a real, wired lever (no placebos), applied live and fully reversible:
+            - **Clouds** (Don't Touch / Fast / Off) — clouds are a translucent layer redrawn every frame, pure overdraw on an iGPU.
+            - **Fast Graphics** — forces the vanilla Graphics setting to Fast; one of the biggest single FPS wins on weak iGPUs.
+            - **Disable Smooth Lighting** — skips per-vertex ambient occlusion during chunk meshing: cheaper chunk builds, fewer streaming hitches.
+            - **Force VSync Off** — uncaps FPS from your display's refresh rate while Intelium is active.
+            - **Max Render Distance** — caps render distance downward (never raises it); the most reliable FPS lever there is.
+            - **Frame-time overlay line** — the FPS test overlay can now show current + average frame time in milliseconds (1.21.11 jar).
+
+            ### Fixes
+            - **Your settings are truly yours again:** captured originals are now persisted, so turning a tweak (or Intelium) off restores *your* values even across a game restart. Previously the forced values could end up saved into `options.txt`.
+            - **The master switch is honoured at startup** — disabling Intelium no longer silently re-enables it on the next launch.
+            - **A corrupted `intelium.json` can no longer crash the game** — bad configs fall back to defaults, saves are atomic (no half-written files), and hand-edited values are clamped to valid ranges.
+
+            Two jars: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) or `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Full Türkçe and English localisation. Verified compatible with GPUTape and AsyncParticles.
 
             ## Türkçe (Turkish)
 
-            Çoklu sürüm: Intelium artık Minecraft **1.21.11** ve **26.x** serisini (26.1, 26.1.1, 26.1.2, 26.2) destekliyor — 26.2'nin yeni Vulkan render motoru dahil.
+            Cila sürümü: beş yeni gerçek FPS kolu, daha akıllı bir overlay ve önemli hata düzeltmeleri. Minecraft **1.21.11** ve **26.x** serisi (26.1 → 26.2, Vulkan dahil) desteklenir.
 
-            - **İki jar, her Minecraft serisi için bir tane.** `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) ya da `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25) seç. 26.x jar'ı 26.1 → 26.2 arasında çalışır ve mevcut Sodium sürümüne uyum sağlar.
-            - **Her sürüm için en güncel Sodium API'leri** kullanıldı (1.21.11'de Sodium 0.8.x, 26.x serisinde 0.8.x/0.9.x), 26.x için resmi eşlemelerle.
-            - **Daha fazla FPS, güvenle:** nesle ve profile duyarlı chunk-build worker sayısı, hızlı chunk yükleme (Sodium defer-mode geçersiz kılma) ve canlı render ayarları (varlık mesafesi, parçacıklar, varlık gölgeleri, biyom karışımı).
-            - **GPU modlarıyla uyumlu:** GPUTape ve AsyncParticles ile çakışma olmadığı doğrulandı — Intelium GL/Vulkan tamponlarına asla dokunmaz ve AsyncParticles kuruluyken parçacık ayarından çekilir.
-            - **Diller:** tam Türkçe ve Amerikan İngilizcesi; herhangi bir İngilizce çeşidi ve diğer tüm diller otomatik olarak Amerikan İngilizcesine döner.
-            - Not: 26.x'te taşınabilir FPS ekranı ve özel ekranlar geçici olarak yok (Minecraft 26, GUI'yi Vulkan için yeniledi); çekirdek optimizasyonlar ve Sodium ayar sayfası tam çalışır durumda.
+            ### Yeni ayarlar — yepyeni bir "GPU Tasarrufları" grubu
+            Her seçenek gerçek, bağlı bir koldur (placebo yok), canlı uygulanır ve tamamen geri alınabilir:
+            - **Bulutlar** (Dokunma / Hızlı / Kapalı) — bulutlar her kare yeniden çizilen yarı saydam bir katmandır, iGPU'da saf overdraw.
+            - **Hızlı Grafikler** — vanilla Grafik ayarını Hızlı'ya zorlar; zayıf iGPU'lardaki en büyük tekil FPS kazançlarından biri.
+            - **Yumuşak Aydınlatmayı Kapat** — chunk meshing'deki köşe başına ambient occlusion'ı atlar: daha ucuz chunk build'leri, daha az takılma.
+            - **VSync'i Kapat** — Intelium etkinken FPS'i ekranın yenileme hızından kurtarır.
+            - **Maks Görüş Mesafesi** — görüş mesafesini yalnızca aşağı doğru sınırlar (asla yükseltmez); var olan en güvenilir FPS kolu.
+            - **Kare süresi satırı** — FPS test overlay'i artık anlık + ortalama kare süresini milisaniye olarak gösterebilir (1.21.11 jar'ı).
+
+            ### Düzeltmeler
+            - **Ayarların artık gerçekten senin:** yakalanan orijinal değerler kalıcı hale getirildi; bir ayarı (veya Intelium'u) kapatmak, oyunu yeniden başlatsan bile *senin* değerlerini geri yükler. Önceden zorlanan değerler `options.txt`'ye kaydedilebiliyordu.
+            - **Ana anahtar açılışta dikkate alınıyor** — Intelium'u kapatmak artık bir sonraki açılışta sessizce geri açılmasına yol açmıyor.
+            - **Bozuk bir `intelium.json` artık oyunu çökertemez** — bozuk config varsayılanlara döner, kayıtlar atomiktir (yarım yazılmış dosya olmaz) ve elle düzenlenen değerler geçerli aralıklara sıkıştırılır.
+
+            İki jar: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) ya da `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Tam Türkçe ve İngilizce yerelleştirme. GPUTape ve AsyncParticles ile uyumluluğu doğrulandı.
             ````
           files: |
             dist/Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar
