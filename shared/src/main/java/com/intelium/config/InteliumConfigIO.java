@@ -71,7 +71,26 @@ public final class InteliumConfigIO {
             // Covers IO errors AND a corrupted / hand-mangled JSON file
             // (JsonSyntaxException). Never let a bad config crash the game.
             Intelium.LOGGER.error("Failed to read Intelium config, using defaults", e);
-            return new InteliumConfig();
+            backupCorruptFile();
+            // Heal: rewrite a valid file so settings persist again from now on
+            // (otherwise this error would repeat on every launch and changes
+            // made in the settings screen would keep getting lost).
+            InteliumConfig fresh = new InteliumConfig();
+            cached = fresh;
+            flush();
+            return fresh;
+        }
+    }
+
+    /** Keeps a copy of an unreadable config next to it before overwriting. */
+    private static void backupCorruptFile() {
+        try {
+            Files.copy(PATH, PATH.resolveSibling(PATH.getFileName() + ".broken"),
+                    StandardCopyOption.REPLACE_EXISTING);
+            Intelium.LOGGER.warn("Intelium: kept a copy of the unreadable config at "
+                    + "intelium.json.broken");
+        } catch (IOException ignored) {
+            // Best effort - the file may be unreadable for the same reason.
         }
     }
 }
