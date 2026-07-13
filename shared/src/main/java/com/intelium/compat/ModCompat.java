@@ -23,6 +23,10 @@ import net.fabricmc.loader.api.FabricLoader;
  *       mods. Intelium therefore does <em>not</em> force the vanilla particle
  *       setting when AsyncParticles is installed; it lets AsyncParticles own
  *       particle performance.</li>
+ *   <li><b>Dynamic FPS / FPS Reducer</b> - dedicated background frame limiters
+ *       that manage the frame rate around window focus themselves. Intelium's
+ *       background FPS limit steps aside when one is installed, so the two
+ *       never fight over the max-FPS option.</li>
  * </ul>
  *
  * <p>Results are cached after the first lookup: the mod set is fixed once the
@@ -34,6 +38,7 @@ public final class ModCompat {
 
     private static volatile Boolean asyncParticles;
     private static volatile Boolean gpuTape;
+    private static volatile Boolean frameLimiter;
     private static volatile boolean logged;
 
     /** True when AsyncParticles is loaded; Intelium yields particle control to it. */
@@ -58,6 +63,20 @@ public final class ModCompat {
         return v;
     }
 
+    /**
+     * True when a dedicated background frame limiter (Dynamic FPS, FPS
+     * Reducer) is loaded; Intelium yields the background-FPS lever to it.
+     */
+    public static boolean frameLimiterPresent() {
+        Boolean v = frameLimiter;
+        if (v == null) {
+            // Dynamic FPS has shipped under both ids across loaders/releases.
+            v = isLoaded("dynamic_fps") || isLoaded("dynamicfps") || isLoaded("fpsreducer");
+            frameLimiter = v;
+        }
+        return v;
+    }
+
     /** Logs detected companions exactly once, for diagnostics. */
     public static void logOnce() {
         if (logged) return;
@@ -69,6 +88,11 @@ public final class ModCompat {
         if (gpuTapePresent()) {
             Intelium.LOGGER.info("Intelium: GPUTape detected - no overlap (Intelium never touches "
                     + "GL/Vulkan buffers); both run together safely.");
+        }
+        if (frameLimiterPresent()) {
+            Intelium.LOGGER.info("Intelium: a dedicated frame limiter (Dynamic FPS / FPS Reducer) "
+                    + "is installed - Intelium will not touch the background FPS limit, leaving "
+                    + "it to that mod.");
         }
     }
 

@@ -1,0 +1,72 @@
+package com.intelium.client;
+
+import com.intelium.Intelium;
+import com.intelium.config.InteliumConfig;
+import com.intelium.config.InteliumConfigIO;
+import com.intelium.hud.AbBenchmark;
+import com.intelium.hud.FpsTracker;
+import com.intelium.optimization.AdaptiveDistanceController;
+import net.minecraft.client.MinecraftClient;
+
+/**
+ * Client driver for the adaptive render distance: feeds the pure-logic
+ * {@link AdaptiveDistanceController} with the smoothed FPS once per tick and
+ * publishes the resulting cap for {@link RenderTweaks} to apply through the
+ * usual capture/restore path.
+ *
+ * <p>Measurement pauses (and any reduction is dropped) whenever the feature is
+ * off, no world is loaded, the window is unfocused (a background frame limit
+ * would read as "low FPS" and wrongly shrink the world), or the A/B benchmark
+ * is running (it toggles Intelium itself, so its FPS swings must not steer the
+ * controller). The reduction is intentionally not persisted: every launch
+ * starts unreduced and re-measures.
+ */
+public final class AdaptiveDistance {
+
+    private AdaptiveDistance() {}
+
+    /** ~5s rolling window at 20 ticks/s; smooths chunk-build bursts away. */
+    private static final FpsTracker TRACKER = new FpsTracker(100);
+    /** Samples needed before the controller may act (~2s warm-up). */
+    private static final int WARMUP_SAMPLES = 40;
+
+    private static final AdaptiveDistanceController CONTROLLER = new AdaptiveDistanceController();
+    private static volatile int cap = 0;
+
+    /** Called once per client tick, before {@link RenderTweaks#apply()}. */
+    public static void tick(MinecraftClient client) {
+        InteliumConfig cfg = InteliumConfigIO.get();
+        boolean active = Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE
+                && cfg.tuneFrameSettings && cfg.adaptiveRenderDistance
+                && client.world != null
+                && client.isWindowFocused()
+                && !AbBenchmark.INSTANCE.isRunning();
+        if (!active) {
+            if (cap != 0 || CONTROLLER.reduction() > 0 || TRACKER.sampleCount() > 0) {
+                CONTROLLER.reset();
+                TRACKER.reset();
+                cap = 0;
+            }
+            return;
+        }
+        TRACKER.push(client.getCurrentFps());
+        if (TRACKER.sampleCount() < WARMUP_SAMPLES) return;
+        cap = CONTROLLER.update(cfg.adaptiveFpsTarget, TRACKER.smoothed(), baseDistance(client, cfg));
+    }
+
+    /** The current adaptive render-distance cap in chunks; 0 = hands off. */
+    public static int currentCap() {
+        return cap;
+    }
+
+    /**
+     * The distance the controller works down from: the user's own setting
+     * (the captured original when a cap already manages the option), further
+     * bounded by the static Max Render Distance lever when that is set.
+     */
+    private static int baseDistance(MinecraftClient mc, InteliumConfig cfg) {
+        Integer captured = cfg.captured.renderDistance;
+        int user = captured != null ? captured : mc.options.getViewDistance().getValue();
+        return cfg.maxRenderDistance > 0 ? Math.min(user, cfg.maxRenderDistance) : user;
+    }
+}

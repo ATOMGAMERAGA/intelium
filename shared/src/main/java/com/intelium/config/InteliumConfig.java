@@ -101,6 +101,40 @@ public class InteliumConfig {
      */
     public int maxRenderDistance = 0;
 
+    /**
+     * Cap on the vanilla simulation distance, in chunks. {@code 0} means "do
+     * not touch". A positive value caps it downward (never raises it) - fewer
+     * ticked chunks means real CPU savings in singleplayer, which on an iGPU
+     * sharing a power budget with the CPU also frees thermal headroom for
+     * frames. See {@code AdaptiveDistanceController} for why downward-only.
+     */
+    public int maxSimulationDistance = 0;
+
+    // ---- Adaptive performance ------------------------------------------
+
+    /**
+     * Adaptive render distance: when the measured FPS stays below
+     * {@link #adaptiveFpsTarget}, the render distance is stepped down (one
+     * chunk at a time, never below half the user's own setting); when there is
+     * sustained headroom it is stepped back up. Off by default - it changes a
+     * visible setting on its own, so the user must opt in. See
+     * {@code AdaptiveDistanceController}.
+     */
+    public boolean adaptiveRenderDistance = false;
+
+    /** The FPS the adaptive controller tries to hold (30-144). */
+    public int adaptiveFpsTarget = 60;
+
+    /**
+     * Frame-rate cap applied while the game window is unfocused. {@code 0}
+     * means "off". On an iGPU this is a double win: background frames stop
+     * burning the shared CPU/GPU power budget, so the game also comes back
+     * cooler when refocused. The user's own FPS limit is captured and restored
+     * the moment the window regains focus. Intelium yields this lever entirely
+     * when a dedicated mod (Dynamic FPS, FPS Reducer) is installed.
+     */
+    public int backgroundFpsLimit = 0;
+
     // ---- FPS test overlay ------------------------------------------------
 
     /** Whether the movable on-screen FPS test overlay is shown. */
@@ -142,6 +176,9 @@ public class InteliumConfig {
         public Boolean smoothLighting;
         public Boolean vsync;
         public Integer renderDistance;
+        public Integer simulationDistance;
+        /** The user's own max-FPS limit (background FPS limit lever). */
+        public Integer fpsLimit;
         /** Sodium's chunk-build defer mode (fast chunk loading lever). */
         public String sodiumDeferMode;
     }
@@ -160,6 +197,11 @@ public class InteliumConfig {
         cfg.maxEntityDistancePercent = clamp(cfg.maxEntityDistancePercent, 50, 100);
         cfg.maxRenderDistance = cfg.maxRenderDistance <= 0
                 ? 0 : clamp(cfg.maxRenderDistance, 2, 32);
+        cfg.maxSimulationDistance = cfg.maxSimulationDistance <= 0
+                ? 0 : clamp(cfg.maxSimulationDistance, 5, 32);
+        cfg.adaptiveFpsTarget = clamp(cfg.adaptiveFpsTarget, 30, 144);
+        cfg.backgroundFpsLimit = cfg.backgroundFpsLimit <= 0
+                ? 0 : clamp(cfg.backgroundFpsLimit, 10, 60);
         cfg.overlayX = Math.max(0, cfg.overlayX);
         cfg.overlayY = Math.max(0, cfg.overlayY);
         if (cfg.captured == null) cfg.captured = new CapturedOptions();

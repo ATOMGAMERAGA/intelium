@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INTELIUM_VERSION: "1.2.1"
+  INTELIUM_VERSION: "1.2.2"
 
 jobs:
   build:
@@ -36,11 +36,11 @@ jobs:
           - target: mc1.21.11
             java: '21'
             label: '1.21.11'
-            jarname: 'Intelium-v1.2.1-1.21.11.jar'
+            jarname: 'Intelium-v1.2.2-1.21.11.jar'
           - target: mc26
             java: '25'
             label: '26.x'
-            jarname: 'Intelium-v1.2.1-26.x.jar'
+            jarname: 'Intelium-v1.2.2-26.x.jar'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,43 +131,35 @@ jobs:
             ````markdown
             ## English
 
-            Polish release: five new real FPS levers, a smarter overlay, and important bug fixes. Supports Minecraft **1.21.11** and the **26.x** line (26.1 → 26.2, including the Vulkan renderer).
+            **Adaptive Performance release** — Intelium now reacts to your FPS in real time instead of only applying static tweaks. Three new real levers (no placebos, applied live, fully reversible), built on the techniques proven by Dynamic FPS and the adaptive-render-distance family of mods. Supports Minecraft **1.21.11** and the **26.x** line (26.1 → 26.2, including the Vulkan renderer).
 
-            ### New settings — a whole "GPU Savers" group
-            Every option is a real, wired lever (no placebos), applied live and fully reversible:
-            - **Clouds** (Don't Touch / Fast / Off) — clouds are a translucent layer redrawn every frame, pure overdraw on an iGPU.
-            - **Fast Graphics** — forces the vanilla Graphics setting to Fast; one of the biggest single FPS wins on weak iGPUs.
-            - **Disable Smooth Lighting** — skips per-vertex ambient occlusion during chunk meshing: cheaper chunk builds, fewer streaming hitches.
-            - **Force VSync Off** — uncaps FPS from your display's refresh rate while Intelium is active.
-            - **Max Render Distance** — caps render distance downward (never raises it); the most reliable FPS lever there is.
-            - **Frame-time overlay line** — the FPS test overlay can now show current + average frame time in milliseconds (1.21.11 jar).
+            ### New — "Adaptive Performance" group
+            - **Adaptive Render Distance** — set an FPS target (30–120); when your FPS stays below it, Intelium steps the render distance down one chunk at a time, and steps it back up when there is sustained headroom. Hysteresis + hold timers mean a short dip (a GC pause, a chunk-build burst) never triggers a step, and it never goes below half your own setting. Your distance is restored the moment you turn it off.
+            - **Background FPS Limit** — caps the frame rate while the game window is unfocused. On an iGPU this is a double win: background frames stop burning the shared CPU/GPU power budget, so the game also comes back cooler when you return. Your own FPS limit is restored the instant the window regains focus. Steps aside automatically when Dynamic FPS or FPS Reducer is installed.
+            - **Max Simulation Distance** (GPU Savers) — caps the simulation distance downward, cutting the per-tick CPU cost in singleplayer; on power-shared iGPUs, a cooler CPU means faster frames.
 
-            ### Fixes
-            - **Your settings are truly yours again:** captured originals are now persisted, so turning a tweak (or Intelium) off restores *your* values even across a game restart. Previously the forced values could end up saved into `options.txt`.
-            - **The master switch is honoured at startup** — disabling Intelium no longer silently re-enables it on the next launch.
-            - **A corrupted `intelium.json` can no longer crash the game** — bad configs fall back to defaults, saves are atomic (no half-written files), and hand-edited values are clamped to valid ranges.
+            ### Why these work
+            Render distance is the single most reliable FPS lever there is — but a static cap is either too tight on a quiet plain or too loose in a jungle village. The adaptive controller measures a 5-second rolling average and keeps the world as large as your machine can afford *right now*. The background limiter uses the same approach Dynamic FPS proved: frames nobody is looking at are pure waste — on Intel iGPUs they also steal power from the CPU.
 
-            Two jars: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) or `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Full Türkçe and English localisation. Verified compatible with GPUTape and AsyncParticles.
+            All existing levers (chunk-worker tuning, fast chunk loading, the GPU Savers group, live render tweaks) are unchanged and still capture & restore your original settings — even across a restart.
+
+            Two jars: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) or `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Full Türkçe and English localisation. Verified compatible with GPUTape, AsyncParticles, Dynamic FPS and FPS Reducer.
 
             ## Türkçe (Turkish)
 
-            Cila sürümü: beş yeni gerçek FPS kolu, daha akıllı bir overlay ve önemli hata düzeltmeleri. Minecraft **1.21.11** ve **26.x** serisi (26.1 → 26.2, Vulkan dahil) desteklenir.
+            **Uyarlanabilir Performans sürümü** — Intelium artık yalnızca statik ayarlar uygulamakla kalmıyor, FPS'ine gerçek zamanlı tepki veriyor. Üç yeni gerçek kol (placebo yok, canlı uygulanır, tamamen geri alınabilir); Dynamic FPS ve uyarlanabilir görüş mesafesi modlarının kanıtladığı tekniklerle. Minecraft **1.21.11** ve **26.x** serisi (26.1 → 26.2, Vulkan dahil) desteklenir.
 
-            ### Yeni ayarlar — yepyeni bir "GPU Tasarrufları" grubu
-            Her seçenek gerçek, bağlı bir koldur (placebo yok), canlı uygulanır ve tamamen geri alınabilir:
-            - **Bulutlar** (Dokunma / Hızlı / Kapalı) — bulutlar her kare yeniden çizilen yarı saydam bir katmandır, iGPU'da saf overdraw.
-            - **Hızlı Grafikler** — vanilla Grafik ayarını Hızlı'ya zorlar; zayıf iGPU'lardaki en büyük tekil FPS kazançlarından biri.
-            - **Yumuşak Aydınlatmayı Kapat** — chunk meshing'deki köşe başına ambient occlusion'ı atlar: daha ucuz chunk build'leri, daha az takılma.
-            - **VSync'i Kapat** — Intelium etkinken FPS'i ekranın yenileme hızından kurtarır.
-            - **Maks Görüş Mesafesi** — görüş mesafesini yalnızca aşağı doğru sınırlar (asla yükseltmez); var olan en güvenilir FPS kolu.
-            - **Kare süresi satırı** — FPS test overlay'i artık anlık + ortalama kare süresini milisaniye olarak gösterebilir (1.21.11 jar'ı).
+            ### Yeni — "Uyarlanabilir Performans" grubu
+            - **Uyarlanabilir Görüş Mesafesi** — bir FPS hedefi belirle (30–120); FPS'in bunun altında kaldığında Intelium görüş mesafesini her seferinde bir chunk düşürür, kalıcı alan açıldığında geri yükseltir. Histerezis + bekleme sayaçları sayesinde kısa bir düşüş (GC duraklaması, chunk-build patlaması) asla adım tetiklemez ve mesafe asla kendi ayarının yarısının altına inmez. Kapattığın an kendi mesafen geri yüklenir.
+            - **Arka Plan FPS Sınırı** — oyun penceresi odak dışındayken kare hızını sınırlar. iGPU'da bu çifte kazançtır: arka plan kareleri paylaşılan CPU/GPU güç bütçesini yakmayı bırakır, oyuna döndüğünde makinen daha serindir. Pencere odağı geri kazandığı an kendi FPS sınırın geri yüklenir. Dynamic FPS veya FPS Reducer kuruluysa otomatik olarak kenara çekilir.
+            - **Maks Simülasyon Mesafesi** (GPU Tasarrufları) — simülasyon mesafesini aşağı doğru sınırlar, tek oyunculuda tick başına CPU maliyetini keser; gücü paylaşan iGPU'larda daha serin CPU, daha hızlı kare demektir.
 
-            ### Düzeltmeler
-            - **Ayarların artık gerçekten senin:** yakalanan orijinal değerler kalıcı hale getirildi; bir ayarı (veya Intelium'u) kapatmak, oyunu yeniden başlatsan bile *senin* değerlerini geri yükler. Önceden zorlanan değerler `options.txt`'ye kaydedilebiliyordu.
-            - **Ana anahtar açılışta dikkate alınıyor** — Intelium'u kapatmak artık bir sonraki açılışta sessizce geri açılmasına yol açmıyor.
-            - **Bozuk bir `intelium.json` artık oyunu çökertemez** — bozuk config varsayılanlara döner, kayıtlar atomiktir (yarım yazılmış dosya olmaz) ve elle düzenlenen değerler geçerli aralıklara sıkıştırılır.
+            ### Neden işe yarıyor
+            Görüş mesafesi var olan en güvenilir FPS koludur — ama statik bir sınır ya sakin bir ovada gereksiz sıkı, ya da bir orman köyünde fazla gevşektir. Uyarlanabilir denetleyici 5 saniyelik kayan ortalamayı ölçer ve dünyayı makinenin *şu anda* kaldırabileceği kadar büyük tutar. Arka plan sınırlayıcı, Dynamic FPS'in kanıtladığı yaklaşımı kullanır: kimsenin bakmadığı kareler saf israftır — Intel iGPU'larda üstelik CPU'dan güç çalarlar.
 
-            İki jar: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) ya da `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Tam Türkçe ve İngilizce yerelleştirme. GPUTape ve AsyncParticles ile uyumluluğu doğrulandı.
+            Var olan tüm kollar (chunk-worker ayarı, hızlı chunk yükleme, GPU Tasarrufları grubu, canlı render ayarları) değişmedi ve orijinal ayarlarını yakalayıp geri yüklemeye devam ediyor — yeniden başlatmalarda bile.
+
+            İki jar: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) ya da `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Tam Türkçe ve İngilizce yerelleştirme. GPUTape, AsyncParticles, Dynamic FPS ve FPS Reducer ile uyumluluğu doğrulandı.
             ````
           files: |
             dist/Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar
