@@ -32,6 +32,9 @@ public class InteliumClientInit implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             IntelGpuDetector.detectOnce();
+            // Feed the adaptive render-distance controller first so the cap it
+            // publishes is applied by RenderTweaks in the same tick.
+            AdaptiveDistance.tick(client);
             // Keep the live render tweaks reconciled with the config.
             RenderTweaks.apply();
             // Keep Sodium's defer mode in sync with the fast-chunk-loading mode.

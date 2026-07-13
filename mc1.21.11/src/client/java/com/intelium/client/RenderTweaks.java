@@ -42,6 +42,10 @@ public final class RenderTweaks {
     private static final double MIN_ENTITY_SCALE = 0.5;
     /** Vanilla render-distance bounds, in chunks. */
     private static final int MIN_RENDER_DISTANCE = 2;
+    /** Vanilla simulation-distance lower bound, in chunks. */
+    private static final int MIN_SIMULATION_DISTANCE = 5;
+    /** Lowest max-FPS value the vanilla option accepts. */
+    private static final int MIN_FPS_LIMIT = 10;
 
     /**
      * Reconciles the live game options with the current config. Safe to call
@@ -71,11 +75,26 @@ public final class RenderTweaks {
         dirty |= applyGraphics(o, cap, master && cfg.fastGraphics);
         dirty |= applySmoothLighting(o, cap, master && cfg.disableSmoothLighting);
         dirty |= applyVsync(o, cap, master && cfg.disableVsync);
-        dirty |= applyRenderDistance(o, cap, master && cfg.maxRenderDistance > 0,
-                cfg.maxRenderDistance);
+        // The render-distance cap is the tighter of the static lever and the
+        // live adaptive controller (0 = the respective lever is off).
+        int rdCap = mergeCaps(master && cfg.maxRenderDistance > 0 ? cfg.maxRenderDistance : 0,
+                master ? AdaptiveDistance.currentCap() : 0);
+        dirty |= applyRenderDistance(o, cap, rdCap > 0, rdCap);
+        dirty |= applySimulationDistance(o, cap, master && cfg.maxSimulationDistance > 0,
+                cfg.maxSimulationDistance);
+        // Yield the background limit to a dedicated frame limiter mod
+        // (Dynamic FPS, FPS Reducer) so the two never fight over max FPS.
+        dirty |= applyBackgroundFps(mc, o, cap,
+                master && cfg.backgroundFpsLimit > 0 && !ModCompat.frameLimiterPresent(),
+                cfg.backgroundFpsLimit);
 
         // Persist capture/restore transitions so originals survive a restart.
         if (dirty) InteliumConfigIO.flush();
+    }
+
+    /** Combines two downward caps where 0 means "off": the tighter one wins. */
+    private static int mergeCaps(int a, int b) {
+        return (a > 0 && b > 0) ? Math.min(a, b) : Math.max(a, b);
     }
 
     private static boolean applyEntityDistance(GameOptions o, InteliumConfig.CapturedOptions cap,
@@ -267,6 +286,50 @@ public final class RenderTweaks {
         } else if (cap.renderDistance != null) {
             setIfChanged(opt, cap.renderDistance);
             cap.renderDistance = null;
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean applySimulationDistance(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                                   boolean on, int maxChunks) {
+        SimpleOption<Integer> opt = o.getSimulationDistance();
+        if (on) {
+            boolean captured = false;
+            if (cap.simulationDistance == null) {
+                cap.simulationDistance = opt.getValue();
+                captured = true;
+            }
+            int target = Math.max(MIN_SIMULATION_DISTANCE, maxChunks);
+            // Only cap downward; never raise a distance the user set lower.
+            setIfChanged(opt, Math.min(cap.simulationDistance, target));
+            return captured;
+        } else if (cap.simulationDistance != null) {
+            setIfChanged(opt, cap.simulationDistance);
+            cap.simulationDistance = null;
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean applyBackgroundFps(MinecraftClient mc, GameOptions o,
+                                              InteliumConfig.CapturedOptions cap,
+                                              boolean on, int limit) {
+        SimpleOption<Integer> opt = o.getMaxFps();
+        if (on && !mc.isWindowFocused()) {
+            boolean captured = false;
+            if (cap.fpsLimit == null) {
+                cap.fpsLimit = opt.getValue();
+                captured = true;
+            }
+            int target = Math.max(MIN_FPS_LIMIT, limit);
+            // Never raise a max-FPS limit the user already set lower.
+            setIfChanged(opt, Math.min(cap.fpsLimit, target));
+            return captured;
+        } else if (cap.fpsLimit != null) {
+            // Focus regained (or the lever turned off): restore immediately.
+            setIfChanged(opt, cap.fpsLimit);
+            cap.fpsLimit = null;
             return true;
         }
         return false;

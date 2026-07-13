@@ -34,6 +34,7 @@ in `src/main/resources/assets/intelium/icon.png`.
 | Fast chunk loading | Overrides Sodium's chunk **defer mode** — which ships at the slowest setting (`Always`) — so freshly meshed chunks become visible much sooner, and boosts build throughput. **Fast** = one-frame delay (recommended), **Turbo** = zero-frame (fastest). Self-disables cleanly if a Sodium build moves the setting. |
 | Live render tweaks | Opt-in caps on vanilla settings that cost real per-frame GPU/CPU time on weak iGPUs: entity render distance, particles, entity shadows, biome blending, clouds, graphics mode, smooth lighting, VSync and render distance. Each captures your original value and restores it when turned off — the captured originals are persisted, so the restore works even across a game restart. |
 | Optimization profile | **Max FPS / Balanced / Smooth** — shifts the chunk-worker trade-off toward peak frame rate or toward steady frame times while walking and turning. |
+| Adaptive performance | **Adaptive Render Distance** holds a user-set FPS target by stepping the render distance down when FPS stays low and back up when there is headroom (hysteresis + hold timers, never below half your setting). **Background FPS Limit** caps the frame rate while the window is unfocused and restores your limit the instant focus returns. |
 | Stutter visibility | The overlay shows the **1% low** and **minimum** FPS over the last few seconds, so you can see hitches, not just the headline average. |
 | GPU detection | Identifies the exact Intel generation from the GL renderer string on both Windows drivers and Linux/Mesa, and reports support status in-game and in the log. |
 | Honest gating | Disables itself cleanly on NVIDIA / AMD / unrecognized / too-old GPUs. A Mixin config plugin checks each hook's Sodium target at load time, so any compatible Sodium version works and incompatible internals self-disable instead of crashing. |
@@ -58,8 +59,8 @@ contains both; pick the one matching your Minecraft version.
 
 | Jar | Minecraft | Java | Renderer | Sodium |
 |---|---|---|---|---|
-| `Intelium-v1.2.1-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
-| `Intelium-v1.2.1-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
+| `Intelium-v1.2.2-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
+| `Intelium-v1.2.2-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
 
 - Fabric Loader **0.18.3+**
 - Fabric API
@@ -121,7 +122,7 @@ Settings are split across two pages: **General** (core + render tweaks) and
 | Disable Entity Shadows | `false` | Turns off the round shadows under entities. |
 | Fast Biome Blend | `false` | Forces biome blend to 0. Biome blending runs on the chunk-build thread, so this makes meshing much cheaper and cuts hitches when chunks stream in. |
 
-**General → GPU Savers** (new in 1.2.1; all off by default because they change how the game looks or behaves)
+**General → GPU Savers** (all off by default because they change how the game looks or behaves)
 
 | Option | Default | Notes |
 |---|---|---|
@@ -130,6 +131,15 @@ Settings are split across two pages: **General** (core + render tweaks) and
 | Disable Smooth Lighting | `false` | Turns off ambient occlusion — cheaper chunk meshing and slightly cheaper frames. |
 | Force VSync Off | `false` | Uncaps FPS from the display refresh rate while Intelium is active. |
 | Max Render Distance | `No Cap` | Caps render distance (in chunks), downward only. Fewer chunk sections to build, upload and draw every frame. |
+| Max Simulation Distance | `No Cap` | Caps simulation distance, downward only. Fewer ticked chunks = real CPU savings in singleplayer; on power-shared iGPUs a cooler CPU means faster frames. |
+
+**General → Adaptive Performance** (new in 1.2.2; off by default)
+
+| Option | Default | Notes |
+|---|---|---|
+| Adaptive Render Distance | `false` | Steps render distance down one chunk at a time when FPS stays below the target, back up with sustained headroom. Hysteresis + hold timers prevent oscillation; never below half your own distance; restored when turned off. |
+| Adaptive FPS Target | `60 FPS` | The frame rate the controller tries to hold (steps down below ~92%, back up above ~115%). |
+| Background FPS Limit | `Off` | Caps FPS while the window is unfocused; your own limit is restored the instant focus returns. Yields automatically to Dynamic FPS / FPS Reducer. |
 
 **Overlay & Test**
 

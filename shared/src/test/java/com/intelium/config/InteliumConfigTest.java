@@ -81,7 +81,8 @@ class InteliumConfigTest {
                 "tuneFrameSettings", "maxEntityDistancePercent", "limitParticles",
                 "disableEntityShadows", "fastBiomeBlend",
                 "cloudsMode", "fastGraphics", "disableSmoothLighting",
-                "disableVsync", "maxRenderDistance",
+                "disableVsync", "maxRenderDistance", "maxSimulationDistance",
+                "adaptiveRenderDistance", "adaptiveFpsTarget", "backgroundFpsLimit",
                 "overlayEnabled", "overlayCompact", "overlayShowLows",
                 "overlayShowFrameTime", "overlayX", "overlayY",
                 "captured"
@@ -135,6 +136,37 @@ class InteliumConfigTest {
         assertFalse(c.disableSmoothLighting);
         assertFalse(c.disableVsync);
         assertEquals(0, c.maxRenderDistance);
+        assertEquals(0, c.maxSimulationDistance);
+    }
+
+    @Test
+    @DisplayName("Default adaptive performance: off, sensible 60 FPS target, no background cap")
+    void defaultAdaptive() {
+        InteliumConfig c = new InteliumConfig();
+        assertFalse(c.adaptiveRenderDistance);
+        assertEquals(60, c.adaptiveFpsTarget);
+        assertEquals(0, c.backgroundFpsLimit);
+    }
+
+    @Test
+    @DisplayName("sanitize clamps the adaptive/background/simulation settings")
+    void sanitizeAdaptive() {
+        InteliumConfig c = new InteliumConfig();
+        c.adaptiveFpsTarget = 5;
+        c.backgroundFpsLimit = 999;
+        c.maxSimulationDistance = 1;
+        InteliumConfig.sanitize(c);
+        assertEquals(30, c.adaptiveFpsTarget);
+        assertEquals(60, c.backgroundFpsLimit);
+        assertEquals(5, c.maxSimulationDistance);
+
+        c.adaptiveFpsTarget = 500;
+        c.backgroundFpsLimit = -3;
+        c.maxSimulationDistance = 99;
+        InteliumConfig.sanitize(c);
+        assertEquals(144, c.adaptiveFpsTarget);
+        assertEquals(0, c.backgroundFpsLimit);
+        assertEquals(32, c.maxSimulationDistance);
     }
 
     @Test
@@ -149,6 +181,8 @@ class InteliumConfigTest {
         assertNull(c.captured.smoothLighting);
         assertNull(c.captured.vsync);
         assertNull(c.captured.renderDistance);
+        assertNull(c.captured.simulationDistance);
+        assertNull(c.captured.fpsLimit);
         assertNull(c.captured.sodiumDeferMode);
     }
 
