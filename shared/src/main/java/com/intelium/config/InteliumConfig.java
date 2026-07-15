@@ -135,6 +135,16 @@ public class InteliumConfig {
      */
     public int backgroundFpsLimit = 0;
 
+    /**
+     * Frame-rate cap applied while a full-screen menu (pause screen, inventory,
+     * settings) is open. {@code 0} means "off". Menus redraw the whole frame -
+     * world included - at full rate even though nothing on screen needs it;
+     * capping them is pure savings, the technique FPS Reducer proved. The
+     * user's own FPS limit is captured and restored the instant the menu
+     * closes. Yields entirely when a dedicated frame limiter mod is installed.
+     */
+    public int menuFpsLimit = 0;
+
     // ---- FPS test overlay ------------------------------------------------
 
     /** Whether the movable on-screen FPS test overlay is shown. */
@@ -202,6 +212,8 @@ public class InteliumConfig {
         cfg.adaptiveFpsTarget = clamp(cfg.adaptiveFpsTarget, 30, 144);
         cfg.backgroundFpsLimit = cfg.backgroundFpsLimit <= 0
                 ? 0 : clamp(cfg.backgroundFpsLimit, 10, 60);
+        cfg.menuFpsLimit = cfg.menuFpsLimit <= 0
+                ? 0 : clamp(cfg.menuFpsLimit, 10, 60);
         cfg.overlayX = Math.max(0, cfg.overlayX);
         cfg.overlayY = Math.max(0, cfg.overlayY);
         if (cfg.captured == null) cfg.captured = new CapturedOptions();

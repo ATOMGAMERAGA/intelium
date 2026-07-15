@@ -20,6 +20,13 @@ package com.intelium.optimization;
  *       because raising the distance itself costs a burst of chunk builds.</li>
  *   <li><b>Gentle steps</b> - one chunk at a time, so each change is a small,
  *       cheap rebuild instead of a hitch.</li>
+ *   <li><b>Fast reaction when it really hurts</b> - when the FPS falls far
+ *       below the target (under ~60% of it: a jungle village, a mob farm, a
+ *       redstone burst), waiting the full hold window one chunk at a time
+ *       leaves the game slideshow-ing for many seconds. In that severe band
+ *       the hold window is halved and each step drops two chunks, so playable
+ *       frame rates come back roughly 4x sooner. The floor still applies, and
+ *       stepping back up stays slow and single-step.</li>
  *   <li><b>Floor</b> - never reduces below half the user's own distance (and
  *       never below the vanilla minimum), so the world cannot collapse.</li>
  * </ul>
@@ -42,6 +49,12 @@ public final class AdaptiveDistanceController {
     static final int DOWN_HOLD_TICKS = 40;
     /** Ticks the FPS must stay high before each upward step (~10s). */
     static final int UP_HOLD_TICKS = 200;
+    /** Below target * this factor the situation is severe: react fast. */
+    static final double SEVERE_FACTOR = 0.60;
+    /** Halved hold window in the severe band (~1s). */
+    static final int SEVERE_HOLD_TICKS = DOWN_HOLD_TICKS / 2;
+    /** Chunks shed per step in the severe band. */
+    static final int SEVERE_STEP = 2;
 
     private int lowTicks;
     private int highTicks;
@@ -69,9 +82,10 @@ public final class AdaptiveDistanceController {
 
         if (smoothedFps < targetFps * LOW_FACTOR) {
             highTicks = 0;
-            if (++lowTicks >= DOWN_HOLD_TICKS) {
+            boolean severe = smoothedFps < targetFps * SEVERE_FACTOR;
+            if (++lowTicks >= (severe ? SEVERE_HOLD_TICKS : DOWN_HOLD_TICKS)) {
                 lowTicks = 0;
-                if (reduction < maxReduction) reduction++;
+                reduction = Math.min(maxReduction, reduction + (severe ? SEVERE_STEP : 1));
             }
         } else if (smoothedFps > targetFps * HIGH_FACTOR) {
             lowTicks = 0;

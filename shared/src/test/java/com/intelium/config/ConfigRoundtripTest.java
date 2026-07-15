@@ -148,6 +148,7 @@ class ConfigRoundtripTest {
         original.adaptiveRenderDistance = true;
         original.adaptiveFpsTarget = 75;
         original.backgroundFpsLimit = 15;
+        original.menuFpsLimit = 30;
         original.maxSimulationDistance = 8;
 
         InteliumConfig parsed = GSON.fromJson(GSON.toJson(original), InteliumConfig.class);
@@ -155,6 +156,7 @@ class ConfigRoundtripTest {
         assertTrue(parsed.adaptiveRenderDistance);
         assertEquals(75, parsed.adaptiveFpsTarget);
         assertEquals(15, parsed.backgroundFpsLimit);
+        assertEquals(30, parsed.menuFpsLimit);
         assertEquals(8, parsed.maxSimulationDistance);
     }
 

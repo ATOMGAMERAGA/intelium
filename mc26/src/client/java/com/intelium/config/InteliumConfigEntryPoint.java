@@ -263,6 +263,24 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                                 .setApplyHook(state -> RenderTweaks.apply())
                                 .setDefaultValue(0)
                         )
+                        .addOption(builder.createIntegerOption(id("menu_fps"))
+                                .setName(Component.translatable("intelium.options.menu_fps"))
+                                .setTooltip(Component.translatable("intelium.options.menu_fps.tooltip"))
+                                .setRange(0, 60, 10)
+                                .setValueFormatter(value -> value <= 0
+                                        ? Component.translatable("intelium.options.menu_fps.off")
+                                        : Component.literal(value + " FPS"))
+                                .setStorageHandler(saveHook)
+                                // Greys out when this Minecraft build exposes no
+                                // current-screen accessor (see MenuScreenProbe).
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE
+                                        && cfg.tuneFrameSettings
+                                        && com.intelium.client.MenuScreenProbe.available())
+                                .setBinding(v -> cfg.menuFpsLimit = v,
+                                            () -> Math.max(0, Math.min(60, cfg.menuFpsLimit)))
+                                .setApplyHook(state -> RenderTweaks.apply())
+                                .setDefaultValue(0)
+                        )
                 )
                 .addOptionGroup(builder.createOptionGroup()
                         .setName(Component.translatable("intelium.options.group.chunks"))

@@ -1,6 +1,7 @@
 package com.intelium.client;
 
 import com.intelium.Intelium;
+import com.intelium.compat.ModCompat;
 import com.intelium.config.InteliumConfig;
 import com.intelium.config.InteliumConfigIO;
 import com.intelium.hud.FpsTracker;
@@ -46,6 +47,13 @@ public final class AdaptiveDistance {
             }
             return;
         }
+        if (menuCapActive(client, cfg)) {
+            // The menu FPS limit makes the measured FPS meaningless: hold the
+            // current reduction and forget the capped samples, then re-warm up
+            // once the menu closes.
+            TRACKER.reset();
+            return;
+        }
         TRACKER.push(client.getFps());
         if (TRACKER.sampleCount() < WARMUP_SAMPLES) return;
         cap = CONTROLLER.update(cfg.adaptiveFpsTarget, TRACKER.smoothed(), baseDistance(client, cfg));
@@ -54,6 +62,12 @@ public final class AdaptiveDistance {
     /** The current adaptive render-distance cap in chunks; 0 = hands off. */
     public static int currentCap() {
         return cap;
+    }
+
+    /** Whether the menu FPS limit is capping the frame rate right now. */
+    private static boolean menuCapActive(Minecraft mc, InteliumConfig cfg) {
+        return cfg.menuFpsLimit > 0 && MenuScreenProbe.menuOpen(mc)
+                && !ModCompat.frameLimiterPresent();
     }
 
     /**
