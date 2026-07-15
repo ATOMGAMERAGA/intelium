@@ -83,6 +83,7 @@ class InteliumConfigTest {
                 "cloudsMode", "fastGraphics", "disableSmoothLighting",
                 "disableVsync", "maxRenderDistance", "maxSimulationDistance",
                 "adaptiveRenderDistance", "adaptiveFpsTarget", "backgroundFpsLimit",
+                "menuFpsLimit",
                 "overlayEnabled", "overlayCompact", "overlayShowLows",
                 "overlayShowFrameTime", "overlayX", "overlayY",
                 "captured"
@@ -146,6 +147,24 @@ class InteliumConfigTest {
         assertFalse(c.adaptiveRenderDistance);
         assertEquals(60, c.adaptiveFpsTarget);
         assertEquals(0, c.backgroundFpsLimit);
+        assertEquals(0, c.menuFpsLimit);
+    }
+
+    @Test
+    @DisplayName("sanitize clamps the menu FPS limit into 0 or 10-60")
+    void sanitizeMenuFps() {
+        InteliumConfig c = new InteliumConfig();
+        c.menuFpsLimit = 999;
+        InteliumConfig.sanitize(c);
+        assertEquals(60, c.menuFpsLimit);
+
+        c.menuFpsLimit = 3;
+        InteliumConfig.sanitize(c);
+        assertEquals(10, c.menuFpsLimit);
+
+        c.menuFpsLimit = -1;
+        InteliumConfig.sanitize(c);
+        assertEquals(0, c.menuFpsLimit);
     }
 
     @Test

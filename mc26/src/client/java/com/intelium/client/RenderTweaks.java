@@ -69,11 +69,10 @@ public final class RenderTweaks {
         dirty |= applyRenderDistance(o, cap, rdCap > 0, rdCap);
         dirty |= applySimulationDistance(o, cap, master && cfg.maxSimulationDistance > 0,
                 cfg.maxSimulationDistance);
-        // Yield the background limit to a dedicated frame limiter mod
+        // Yield the FPS-limit levers to a dedicated frame limiter mod
         // (Dynamic FPS, FPS Reducer) so the two never fight over max FPS.
-        dirty |= applyBackgroundFps(mc, o, cap,
-                master && cfg.backgroundFpsLimit > 0 && !ModCompat.frameLimiterPresent(),
-                cfg.backgroundFpsLimit);
+        dirty |= applyFpsLimit(o, cap,
+                fpsLimitFor(mc, cfg, master && !ModCompat.frameLimiterPresent()));
 
         // Persist capture/restore transitions so originals survive a restart.
         if (dirty) InteliumConfigIO.flush();
@@ -299,11 +298,24 @@ public final class RenderTweaks {
         return false;
     }
 
-    private static boolean applyBackgroundFps(Minecraft mc, Options o,
-                                              InteliumConfig.CapturedOptions cap,
-                                              boolean on, int limit) {
+    /**
+     * The FPS cap that should be active this tick: the background limit while
+     * the window is unfocused, the menu limit while a screen is open, the
+     * tighter of the two when both apply; {@code 0} = hands off.
+     */
+    private static int fpsLimitFor(Minecraft mc, InteliumConfig cfg, boolean on) {
+        if (!on) return 0;
+        int background = (cfg.backgroundFpsLimit > 0 && !mc.isWindowActive())
+                ? cfg.backgroundFpsLimit : 0;
+        int menu = (cfg.menuFpsLimit > 0 && mc.screen != null)
+                ? cfg.menuFpsLimit : 0;
+        return mergeCaps(background, menu);
+    }
+
+    private static boolean applyFpsLimit(Options o, InteliumConfig.CapturedOptions cap,
+                                         int limit) {
         OptionInstance<Integer> opt = o.framerateLimit();
-        if (on && !mc.isWindowActive()) {
+        if (limit > 0) {
             boolean captured = false;
             if (cap.fpsLimit == null) {
                 cap.fpsLimit = opt.get();
@@ -314,7 +326,7 @@ public final class RenderTweaks {
             setIfChanged(opt, Math.min(cap.fpsLimit, target));
             return captured;
         } else if (cap.fpsLimit != null) {
-            // Focus regained (or the lever turned off): restore immediately.
+            // Focus/menu state cleared (or the lever turned off): restore now.
             setIfChanged(opt, cap.fpsLimit);
             cap.fpsLimit = null;
             return true;

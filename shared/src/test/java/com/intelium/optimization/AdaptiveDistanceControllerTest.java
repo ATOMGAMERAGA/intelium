@@ -81,6 +81,42 @@ class AdaptiveDistanceControllerTest {
     }
 
     @Test
+    @DisplayName("FPS far below the target (severe band) steps two chunks after a halved hold")
+    void severeDropReactsFaster() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        // 20 FPS < 60 * 0.60 = 36: severe. One halved hold window, two chunks.
+        assertEquals(0, feed(c, 20, AdaptiveDistanceController.SEVERE_HOLD_TICKS - 1));
+        assertEquals(BASE - AdaptiveDistanceController.SEVERE_STEP, feed(c, 20, 1));
+    }
+
+    @Test
+    @DisplayName("Moderately low FPS (below 92% but above 60%) keeps the gentle single step")
+    void moderateLowStaysGentle() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        // 40 FPS is low (< 55.2) but not severe (> 36): full hold, one chunk.
+        assertEquals(0, feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS - 1));
+        assertEquals(BASE - 1, feed(c, 40, 1));
+    }
+
+    @Test
+    @DisplayName("Severe stepping never breaches the half-base floor")
+    void severeRespectsFloor() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        int cap = feed(c, 10, AdaptiveDistanceController.SEVERE_HOLD_TICKS * 100);
+        assertEquals(AdaptiveDistanceController.floorFor(BASE), cap);
+    }
+
+    @Test
+    @DisplayName("Recovery from a severe reduction still steps up one chunk at a time")
+    void severeRecoveryStaysSlow() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        feed(c, 20, AdaptiveDistanceController.SEVERE_HOLD_TICKS); // down 2
+        assertEquals(BASE - 2, c.currentCap(BASE));
+        assertEquals(BASE - 2, feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS - 1));
+        assertEquals(BASE - 1, feed(c, 90, 1));
+    }
+
+    @Test
     @DisplayName("Non-positive FPS samples are ignored")
     void ignoresZeroFps() {
         AdaptiveDistanceController c = new AdaptiveDistanceController();
