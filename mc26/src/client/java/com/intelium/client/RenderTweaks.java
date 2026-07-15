@@ -307,7 +307,7 @@ public final class RenderTweaks {
         if (!on) return 0;
         int background = (cfg.backgroundFpsLimit > 0 && !mc.isWindowActive())
                 ? cfg.backgroundFpsLimit : 0;
-        int menu = (cfg.menuFpsLimit > 0 && mc.screen != null)
+        int menu = (cfg.menuFpsLimit > 0 && MenuScreenProbe.menuOpen(mc))
                 ? cfg.menuFpsLimit : 0;
         return mergeCaps(background, menu);
     }

@@ -66,7 +66,7 @@ public final class AdaptiveDistance {
 
     /** Whether the menu FPS limit is capping the frame rate right now. */
     private static boolean menuCapActive(Minecraft mc, InteliumConfig cfg) {
-        return cfg.menuFpsLimit > 0 && mc.screen != null
+        return cfg.menuFpsLimit > 0 && MenuScreenProbe.menuOpen(mc)
                 && !ModCompat.frameLimiterPresent();
     }
 
