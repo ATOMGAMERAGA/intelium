@@ -81,7 +81,7 @@ class InteliumConfigTest {
                 "tuneFrameSettings", "maxEntityDistancePercent", "limitParticles",
                 "disableEntityShadows", "fastBiomeBlend",
                 "cloudsMode", "fastGraphics", "disableSmoothLighting",
-                "disableVsync", "maxRenderDistance", "maxSimulationDistance",
+                "disableVsync", "disableMenuBlur", "maxRenderDistance", "maxSimulationDistance",
                 "adaptiveRenderDistance", "adaptiveFpsTarget", "backgroundFpsLimit",
                 "menuFpsLimit",
                 "overlayEnabled", "overlayCompact", "overlayShowLows",

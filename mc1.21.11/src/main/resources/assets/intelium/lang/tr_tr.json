@@ -44,6 +44,8 @@
     "intelium.options.disable_smooth_lighting.tooltip": "Yumuşak aydınlatmayı (ambient occlusion) kapatır. Chunk meshing sırasındaki köşe başına gölgelendirmeyi atlar - daha ucuz chunk build'leri ve biraz daha ucuz kareler, görünür bir bedelle.",
     "intelium.options.disable_vsync": "VSync'i Kapat",
     "intelium.options.disable_vsync.tooltip": "Intelium etkinken VSync'i kapatır, FPS'i ekranın yenileme hızından kurtarır. Kapatınca kendi VSync tercihin geri yüklenir.",
+    "intelium.options.disable_menu_blur": "Menü Arka Plan Bulanıklığını Kapat",
+    "intelium.options.disable_menu_blur.tooltip": "Menü arka plan bulanıklığını 0'a zorlar. Menülerin arkasındaki gaussian bulanıklık her menü karesinde tüm kareyi yeniden filtreler - duraklatma ekranı, envanter veya ayarlar açıkken iGPU'da gerçek GPU tasarrufu. Kapatınca kendi bulanıklık ayarın geri yüklenir.",
     "intelium.options.max_render_distance": "Maks Görüş Mesafesi",
     "intelium.options.max_render_distance.tooltip": "Görüş mesafesini chunk cinsinden sınırlar. Her kare daha az chunk bölümü build edilir, yüklenir ve çizilir - var olan en güvenilir FPS kolu. Yalnızca aşağı doğru sınırlar; 'Sınırsız' ayarına dokunmaz.",
     "intelium.options.max_render_distance.off": "Sınırsız",

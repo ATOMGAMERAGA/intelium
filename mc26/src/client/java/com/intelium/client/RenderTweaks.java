@@ -62,6 +62,7 @@ public final class RenderTweaks {
         dirty |= applyGraphics(o, cap, master && cfg.fastGraphics);
         dirty |= applySmoothLighting(o, cap, master && cfg.disableSmoothLighting);
         dirty |= applyVsync(o, cap, master && cfg.disableVsync);
+        dirty |= applyMenuBlur(o, cap, master && cfg.disableMenuBlur);
         // The render-distance cap is the tighter of the static lever and the
         // live adaptive controller (0 = the respective lever is off).
         int rdCap = mergeCaps(master && cfg.maxRenderDistance > 0 ? cfg.maxRenderDistance : 0,
@@ -251,6 +252,59 @@ public final class RenderTweaks {
         } else if (cap.vsync != null) {
             setIfChanged(opt, cap.vsync);
             cap.vsync = null;
+            return true;
+        }
+        return false;
+    }
+
+    // The menu-blur option is resolved reflectively: the 26.x line reworked
+    // the GUI stack for the Vulkan renderer, so this accessor may be renamed
+    // or removed on a given build. If it can't be found the lever self-disables
+    // (and its option greys out) instead of failing to load - the same
+    // fail-soft contract MenuScreenProbe follows.
+    private static final java.lang.reflect.Method MENU_BLUR_ACCESSOR = resolveMenuBlurAccessor();
+
+    private static java.lang.reflect.Method resolveMenuBlurAccessor() {
+        try {
+            java.lang.reflect.Method m = Options.class.getMethod("menuBackgroundBlurriness");
+            return OptionInstance.class.isAssignableFrom(m.getReturnType()) ? m : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** Whether this Minecraft build still exposes the menu-blur option. */
+    public static boolean menuBlurAvailable() {
+        return MENU_BLUR_ACCESSOR != null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static OptionInstance<Integer> menuBlurOption(Options o) {
+        if (MENU_BLUR_ACCESSOR == null) return null;
+        try {
+            return (OptionInstance<Integer>) MENU_BLUR_ACCESSOR.invoke(o);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static boolean applyMenuBlur(Options o, InteliumConfig.CapturedOptions cap,
+                                         boolean on) {
+        // The gaussian blur behind menus re-filters the whole frame every menu
+        // frame - real GPU cost on an iGPU whenever any screen is open.
+        OptionInstance<Integer> opt = menuBlurOption(o);
+        if (opt == null) return false;
+        if (on) {
+            boolean captured = false;
+            if (cap.menuBlur == null) {
+                cap.menuBlur = opt.get();
+                captured = true;
+            }
+            setIfChanged(opt, 0);
+            return captured;
+        } else if (cap.menuBlur != null) {
+            setIfChanged(opt, cap.menuBlur);
+            cap.menuBlur = null;
             return true;
         }
         return false;

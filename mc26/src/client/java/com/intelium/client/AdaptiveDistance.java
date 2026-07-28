@@ -14,10 +14,13 @@ import net.minecraft.client.Minecraft;
  * publishes the resulting cap for {@link RenderTweaks} to apply through the
  * usual capture/restore path.
  *
- * <p>Measurement pauses (and any reduction is dropped) whenever the feature is
- * off, no world is loaded, or the window is unfocused (a background frame
- * limit would read as "low FPS" and wrongly shrink the world). The reduction
- * is intentionally not persisted: every launch starts unreduced and
+ * <p>Measurement fully resets (and any reduction is dropped) only when the
+ * feature is off or no world is loaded. While the window is unfocused the
+ * reduction is <em>held</em> and only measurement pauses: a background frame
+ * limit would read as "low FPS" and wrongly shrink the world, but dropping the
+ * reduction (as earlier versions did) forced a full chunk re-load on every
+ * alt-tab - and another one on refocus when the controller re-reduced. The
+ * reduction is intentionally not persisted: every launch starts unreduced and
  * re-measures.
  */
 public final class AdaptiveDistance {
@@ -35,11 +38,10 @@ public final class AdaptiveDistance {
     /** Called once per client tick, before {@link RenderTweaks#apply()}. */
     public static void tick(Minecraft client) {
         InteliumConfig cfg = InteliumConfigIO.get();
-        boolean active = Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE
+        boolean featureOn = Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE
                 && cfg.tuneFrameSettings && cfg.adaptiveRenderDistance
-                && client.level != null
-                && client.isWindowActive();
-        if (!active) {
+                && client.level != null;
+        if (!featureOn) {
             if (cap != 0 || CONTROLLER.reduction() > 0 || TRACKER.sampleCount() > 0) {
                 CONTROLLER.reset();
                 TRACKER.reset();
@@ -47,10 +49,11 @@ public final class AdaptiveDistance {
             }
             return;
         }
-        if (menuCapActive(client, cfg)) {
-            // The menu FPS limit makes the measured FPS meaningless: hold the
-            // current reduction and forget the capped samples, then re-warm up
-            // once the menu closes.
+        if (!client.isWindowActive() || menuCapActive(client, cfg)) {
+            // Unfocused or menu-capped frames read as artificially low FPS:
+            // hold the current reduction (dropping it would force a full chunk
+            // re-load on every alt-tab / menu) and forget the tainted samples,
+            // then re-warm up once the game is front and centre again.
             TRACKER.reset();
             return;
         }

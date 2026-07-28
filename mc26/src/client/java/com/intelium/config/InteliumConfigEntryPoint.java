@@ -196,6 +196,19 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                                 .setApplyHook(state -> RenderTweaks.apply())
                                 .setDefaultValue(false)
                         )
+                        .addOption(builder.createBooleanOption(id("disable_menu_blur"))
+                                .setName(Component.translatable("intelium.options.disable_menu_blur"))
+                                .setTooltip(Component.translatable("intelium.options.disable_menu_blur.tooltip"))
+                                .setStorageHandler(saveHook)
+                                // Greys out when this 26.x build no longer
+                                // exposes the menu-blur option (fail-soft).
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE
+                                        && cfg.tuneFrameSettings
+                                        && RenderTweaks.menuBlurAvailable())
+                                .setBinding(v -> cfg.disableMenuBlur = v, () -> cfg.disableMenuBlur)
+                                .setApplyHook(state -> RenderTweaks.apply())
+                                .setDefaultValue(false)
+                        )
                         .addOption(builder.createIntegerOption(id("max_render_distance"))
                                 .setName(Component.translatable("intelium.options.max_render_distance"))
                                 .setTooltip(Component.translatable("intelium.options.max_render_distance.tooltip"))

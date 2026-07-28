@@ -76,6 +76,7 @@ public final class RenderTweaks {
         dirty |= applyGraphics(o, cap, master && cfg.fastGraphics);
         dirty |= applySmoothLighting(o, cap, master && cfg.disableSmoothLighting);
         dirty |= applyVsync(o, cap, master && cfg.disableVsync);
+        dirty |= applyMenuBlur(o, cap, master && cfg.disableMenuBlur);
         // The render-distance cap is the tighter of the static lever and the
         // live adaptive controller (0 = the respective lever is off).
         int rdCap = mergeCaps(master && cfg.maxRenderDistance > 0 ? cfg.maxRenderDistance : 0,
@@ -265,6 +266,27 @@ public final class RenderTweaks {
         } else if (cap.vsync != null) {
             setIfChanged(opt, cap.vsync);
             cap.vsync = null;
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean applyMenuBlur(GameOptions o, InteliumConfig.CapturedOptions cap,
+                                         boolean on) {
+        // The gaussian blur behind menus re-filters the whole frame every menu
+        // frame - real GPU cost on an iGPU whenever any screen is open.
+        SimpleOption<Integer> opt = o.getMenuBackgroundBlurriness();
+        if (on) {
+            boolean captured = false;
+            if (cap.menuBlur == null) {
+                cap.menuBlur = opt.getValue();
+                captured = true;
+            }
+            setIfChanged(opt, 0);
+            return captured;
+        } else if (cap.menuBlur != null) {
+            setIfChanged(opt, cap.menuBlur);
+            cap.menuBlur = null;
             return true;
         }
         return false;
