@@ -94,6 +94,15 @@ public class InteliumConfig {
     public boolean disableVsync = false;
 
     /**
+     * Force the menu background blur to 0. The gaussian blur behind menus
+     * re-filters the whole frame every menu frame - real GPU cost on an iGPU
+     * whenever the pause screen, inventory or settings are open. Off by
+     * default (it visibly changes how menus look); the user's own blurriness
+     * is restored when turned off.
+     */
+    public boolean disableMenuBlur = false;
+
+    /**
      * Cap on the vanilla render distance, in chunks. {@code 0} means "do not
      * touch". A positive value caps the user's render distance downward (never
      * raises it) - fewer chunk sections to build, upload and draw every frame,
@@ -185,6 +194,8 @@ public class InteliumConfig {
         public String graphics;
         public Boolean smoothLighting;
         public Boolean vsync;
+        /** The user's own menu-background blurriness (menu blur lever). */
+        public Integer menuBlur;
         public Integer renderDistance;
         public Integer simulationDistance;
         /** The user's own max-FPS limit (background FPS limit lever). */

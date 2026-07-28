@@ -44,6 +44,8 @@
     "intelium.options.disable_smooth_lighting.tooltip": "Turns off smooth lighting (ambient occlusion). Skips the per-vertex shading done during chunk meshing - cheaper chunk builds and slightly cheaper frames, at a visible cost.",
     "intelium.options.disable_vsync": "Force VSync Off",
     "intelium.options.disable_vsync.tooltip": "Turns VSync off while Intelium is active, uncapping FPS from your display's refresh rate. Your own VSync choice is restored when turned off.",
+    "intelium.options.disable_menu_blur": "Disable Menu Background Blur",
+    "intelium.options.disable_menu_blur.tooltip": "Forces the menu background blur to 0. The gaussian blur behind menus re-filters the whole frame every menu frame - real GPU savings on an iGPU whenever the pause screen, inventory or settings are open. Your own blur setting is restored when turned off.",
     "intelium.options.max_render_distance": "Max Render Distance",
     "intelium.options.max_render_distance.tooltip": "Caps the render distance, in chunks. Fewer chunk sections to build, upload and draw every frame - the single most reliable FPS lever there is. Only caps downward; 'No Cap' leaves your setting untouched.",
     "intelium.options.max_render_distance.off": "No Cap",

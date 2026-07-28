@@ -75,9 +75,88 @@ class AdaptiveDistanceControllerTest {
         assertEquals(BASE - 3, c.currentCap(BASE));
         assertEquals(BASE - 3, feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS - 1));
         assertEquals(BASE - 2, feed(c, 90, 1));
-        // Fully recovers to hands-off with enough sustained headroom.
-        feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS * 3);
+        // Fully recovers to hands-off with enough sustained headroom (each
+        // step now also spends a settle window before measuring again).
+        feed(c, 90, (AdaptiveDistanceController.UP_HOLD_TICKS
+                + AdaptiveDistanceController.SETTLE_TICKS) * 3);
         assertEquals(0, c.currentCap(BASE));
+    }
+
+    @Test
+    @DisplayName("The settle window after an up-step ignores the rebuild's FPS dip")
+    void settleWindowIgnoresOwnRebuild() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS * 2); // down 2
+        feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS);       // up 1
+        assertEquals(BASE - 1, c.currentCap(BASE));
+        // The chunk rebuild caused by that step reads as low FPS for a while:
+        // during the settle window it must NOT trigger a step back down.
+        assertEquals(BASE - 1, feed(c, 40, AdaptiveDistanceController.SETTLE_TICKS));
+        // After settling, a real sustained low still needs the full hold.
+        assertEquals(BASE - 1, feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS - 1));
+        assertEquals(BASE - 2, feed(c, 40, 1));
+    }
+
+    @Test
+    @DisplayName("A failed recovery doubles the wait before the next up attempt")
+    void failedRecoveryBacksOff() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS * 2); // down 2
+        feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS);       // up 1 (probation)
+        // The up-step doesn't hold: FPS collapses again -> step back down.
+        feed(c, 40, AdaptiveDistanceController.SETTLE_TICKS
+                + AdaptiveDistanceController.DOWN_HOLD_TICKS);
+        assertEquals(BASE - 2, c.currentCap(BASE));
+        assertEquals(2, c.upHoldMultiplier());
+        // The next recovery attempt now needs twice the headroom hold.
+        assertEquals(BASE - 2, feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS * 2 - 1));
+        assertEquals(BASE - 1, feed(c, 90, 1));
+    }
+
+    @Test
+    @DisplayName("Repeated failed recoveries back off exponentially, capped at 8x")
+    void backoffIsCapped() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS * 4); // down 4
+        for (int i = 0; i < 5; i++) {
+            // Exactly one up-step (whatever hold is currently required),
+            // then fail it within the probation window.
+            feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS * c.upHoldMultiplier());
+            feed(c, 40, AdaptiveDistanceController.SETTLE_TICKS
+                    + AdaptiveDistanceController.DOWN_HOLD_TICKS);
+        }
+        assertEquals(AdaptiveDistanceController.MAX_UP_HOLD_MULTIPLIER, c.upHoldMultiplier());
+    }
+
+    @Test
+    @DisplayName("A recovery that sticks relaxes the backoff again")
+    void survivedProbationRelaxesBackoff() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS * 3); // down 3
+        feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS);       // up 1
+        feed(c, 40, AdaptiveDistanceController.SETTLE_TICKS
+                + AdaptiveDistanceController.DOWN_HOLD_TICKS);       // failed
+        assertEquals(2, c.upHoldMultiplier());
+        feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS * 2);   // up again
+        // Hold inside the dead band through the whole probation window: the
+        // step stuck, so the backoff halves back to normal.
+        feed(c, 58, AdaptiveDistanceController.SETTLE_TICKS
+                + AdaptiveDistanceController.PROBATION_TICKS);
+        assertEquals(1, c.upHoldMultiplier());
+    }
+
+    @Test
+    @DisplayName("reset() clears the settle window and backoff too")
+    void resetClearsGuards() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS * 2);
+        feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS);
+        feed(c, 40, AdaptiveDistanceController.SETTLE_TICKS
+                + AdaptiveDistanceController.DOWN_HOLD_TICKS);
+        assertEquals(2, c.upHoldMultiplier());
+        c.reset();
+        assertEquals(1, c.upHoldMultiplier());
+        assertEquals(0, c.reduction());
     }
 
     @Test

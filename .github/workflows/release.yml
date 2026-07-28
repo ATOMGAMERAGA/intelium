@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INTELIUM_VERSION: "1.2.3"
+  INTELIUM_VERSION: "1.2.4"
 
 jobs:
   build:
@@ -36,11 +36,11 @@ jobs:
           - target: mc1.21.11
             java: '21'
             label: '1.21.11'
-            jarname: 'Intelium-v1.2.3-1.21.11.jar'
+            jarname: 'Intelium-v1.2.4-1.21.11.jar'
           - target: mc26
             java: '25'
             label: '26.x'
-            jarname: 'Intelium-v1.2.3-26.x.jar'
+            jarname: 'Intelium-v1.2.4-26.x.jar'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,29 +131,39 @@ jobs:
             ````markdown
             ## English
 
-            **Faster FPS recovery release** — this update makes the FPS Intelium wins for you arrive sooner and stick around longer: the adaptive controller now reacts ~4× faster when frame rates collapse, and a new Menu FPS Limit stops menus from burning your iGPU's power budget. Supports Minecraft **1.21.11** and the **26.x** line (26.1 → 26.2, including the Vulkan renderer).
+            **"Stop re-loading my chunks" release** — this update fixes the long-standing annoyance where the adaptive (smart) chunk features made the mod visibly re-load all chunks every so often, and adds a new GPU saver. Supports Minecraft **1.21.11** and the **26.x** line (26.1 → 26.2, including the Vulkan renderer).
 
-            ### Improved — Adaptive Render Distance reacts faster when it really hurts
-            When your FPS falls far below the target (under ~60% of it — a jungle village, a mob farm, a redstone burst), waiting the full 2-second hold and stepping one chunk at a time left the game slideshow-ing for many seconds. In that severe band the controller now halves the hold window and sheds **two chunks per step**, so playable frame rates come back roughly **4× sooner**. Everything that made it trustworthy is unchanged: hysteresis, the half-your-setting floor, slow single-step recovery, and full restore when turned off.
+            ### Fixed — Adaptive Render Distance no longer re-loads chunks over and over
+            Two separate causes, both fixed:
 
-            ### New — Menu FPS Limit (Adaptive Performance group)
-            Menus (pause screen, inventory, settings) redraw the whole frame at full rate even though nothing on screen needs it. The new **Menu FPS Limit** (10–60 FPS, off by default) caps the frame rate while a menu is open — pure GPU/CPU savings, and on an iGPU it also frees the shared power budget so the game is cooler the moment you close the menu. Your own FPS limit is restored the instant the menu closes, and the lever steps aside automatically when Dynamic FPS or FPS Reducer is installed. While a menu is capped, the adaptive controller ignores the (artificially low) FPS readings, so the two features never fight.
+            - **Alt-tab chunk reloads.** Unfocusing the window used to drop the adaptive reduction entirely — which forced a full chunk re-load, and *another one* on refocus when the controller reduced again. The reduction is now **held** while the window is unfocused (and while a menu FPS cap or the A/B benchmark is running); only the measurement pauses.
+            - **Up/down ping-pong.** Stepping the render distance back up triggers a chunk-graph rebuild whose build burst *itself* reads as low FPS — so the controller immediately stepped back down, then up again 10 seconds later, forever. Every swing was a visible "the mod is loading all chunks again" moment. The controller now ignores a short **settle window** after each upward step (its own rebuild is never mistaken for lag), and a recovery that fails puts the next attempt on an **exponential backoff** (2× → 8× longer wait). A recovery that sticks relaxes the backoff again.
 
-            All existing levers (chunk-worker tuning, fast chunk loading, the GPU Savers group, live render tweaks, background FPS limit) are unchanged and still capture & restore your original settings — even across a restart.
+            The result: the smart chunk-loading features now change the render distance only when it genuinely helps, and the world stops flickering through rebuild cycles — which is itself an FPS win, since every avoided rebuild is CPU/GPU time your frames keep.
+
+            ### New — Disable Menu Background Blur (GPU Savers group)
+            The gaussian blur behind menus re-filters the whole frame on every menu frame — real GPU cost on an iGPU whenever the pause screen, inventory or settings are open. The new **Disable Menu Background Blur** toggle (off by default) forces the blur to 0 while Intelium is active, and restores your own blur setting the moment you turn it off. Pairs perfectly with the Menu FPS Limit.
+
+            All existing levers (chunk-worker tuning, fast chunk loading, the GPU Savers group, live render tweaks, background & menu FPS limits) are unchanged and still capture & restore your original settings — even across a restart.
 
             Two jars: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) or `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Full Türkçe and English localisation. Verified compatible with GPUTape, AsyncParticles, Dynamic FPS and FPS Reducer.
 
             ## Türkçe (Turkish)
 
-            **Daha hızlı FPS toparlama sürümü** — bu güncelleme Intelium'un senin için kazandığı FPS'i daha erken getiriyor ve daha uzun tutuyor: uyarlanabilir denetleyici kare hızı çöktüğünde artık ~4 kat daha hızlı tepki veriyor ve yeni Menü FPS Sınırı menülerin iGPU güç bütçeni yakmasını engelliyor. Minecraft **1.21.11** ve **26.x** serisi (26.1 → 26.2, Vulkan dahil) desteklenir.
+            **"Chunk'larımı yeniden yükleyip durma" sürümü** — bu güncelleme, akıllı (uyarlanabilir) chunk özelliklerinin modun ikide bir tüm chunk'ları gözle görülür şekilde yeniden yüklemesine yol açan sorunu çözüyor ve yeni bir GPU tasarrufu ekliyor. Minecraft **1.21.11** ve **26.x** serisi (26.1 → 26.2, Vulkan dahil) desteklenir.
 
-            ### İyileştirildi — Uyarlanabilir Görüş Mesafesi gerçekten gerektiğinde daha hızlı tepki veriyor
-            FPS'in hedefin çok altına düştüğünde (~%60'ının altı — bir orman köyü, bir mob çiftliği, bir redstone patlaması), tam 2 saniyelik beklemeyi bekleyip her seferinde tek chunk düşürmek oyunu saniyelerce slayt gösterisinde bırakıyordu. Bu ağır bölgede denetleyici artık bekleme süresini yarıya indiriyor ve **adım başına iki chunk** düşürüyor; oynanabilir kare hızları kabaca **4 kat daha erken** geri geliyor. Onu güvenilir yapan her şey aynı: histerezis, ayarının-yarısı tabanı, yavaş tek-adımlı toparlanma ve kapatınca tam geri yükleme.
+            ### Düzeltildi — Uyarlanabilir Görüş Mesafesi artık chunk'ları tekrar tekrar yüklemiyor
+            İki ayrı neden vardı, ikisi de düzeltildi:
 
-            ### Yeni — Menü FPS Sınırı (Uyarlanabilir Performans grubu)
-            Menüler (duraklatma ekranı, envanter, ayarlar) ekranda gerek olmamasına rağmen tüm kareyi tam hızda yeniden çizer. Yeni **Menü FPS Sınırı** (10–60 FPS, varsayılan kapalı) bir menü açıkken kare hızını sınırlar — saf GPU/CPU tasarrufu; iGPU'da paylaşılan güç bütçesini de boşalttığı için menüyü kapattığın an oyun daha serindir. Menü kapandığı an kendi FPS sınırın geri yüklenir; Dynamic FPS veya FPS Reducer kuruluysa kol otomatik olarak kenara çekilir. Menü sınırlıyken uyarlanabilir denetleyici (yapay olarak düşük) FPS okumalarını yok sayar, böylece iki özellik asla çakışmaz.
+            - **Alt-tab chunk yeniden yüklemeleri.** Pencere odağı kaybolduğunda uyarlanabilir azaltım tamamen sıfırlanıyordu — bu tam bir chunk yeniden yüklemesine, odak geri geldiğinde denetleyici tekrar düşürdüğü için *bir tane daha* yüklemeye zorluyordu. Artık pencere odaksızken (ve menü FPS sınırı ya da A/B testi çalışırken) azaltım **korunuyor**; yalnızca ölçüm duraklıyor.
+            - **Aşağı/yukarı ping-pong.** Görüş mesafesini yukarı adımlamak chunk grafiğinin yeniden inşasını tetikler ve bu inşa patlaması *kendisi* düşük FPS gibi okunur — denetleyici hemen tekrar aşağı iniyor, 10 saniye sonra tekrar yukarı çıkıyordu; sonsuza dek. Her salınım gözle görülür bir "mod yine tüm chunk'ları yüklüyor" anıydı. Denetleyici artık her yukarı adımdan sonra kısa bir **oturma penceresini** yok sayıyor (kendi tetiklediği inşa asla gecikme sanılmıyor) ve tutmayan bir toparlanma, bir sonraki denemeyi **üstel geri çekilmeye** (2× → 8× daha uzun bekleme) alıyor. Tutan bir toparlanma geri çekilmeyi tekrar gevşetiyor.
 
-            Var olan tüm kollar (chunk-worker ayarı, hızlı chunk yükleme, GPU Tasarrufları grubu, canlı render ayarları, arka plan FPS sınırı) değişmedi ve orijinal ayarlarını yakalayıp geri yüklemeye devam ediyor — yeniden başlatmalarda bile.
+            Sonuç: akıllı chunk yükleme özellikleri görüş mesafesini artık yalnızca gerçekten işe yaradığında değiştiriyor ve dünya yeniden inşa döngülerinde titremeyi bırakıyor — bu başlı başına bir FPS kazancı, çünkü önlenen her yeniden inşa karelerine kalan CPU/GPU zamanıdır.
+
+            ### Yeni — Menü Arka Plan Bulanıklığını Kapat (GPU Tasarrufları grubu)
+            Menülerin arkasındaki gaussian bulanıklık her menü karesinde tüm kareyi yeniden filtreler — duraklatma ekranı, envanter veya ayarlar açıkken iGPU'da gerçek GPU maliyeti. Yeni **Menü Arka Plan Bulanıklığını Kapat** seçeneği (varsayılan kapalı) Intelium etkinken bulanıklığı 0'a zorlar ve kapattığın an kendi bulanıklık ayarını geri yükler. Menü FPS Sınırı ile mükemmel uyum sağlar.
+
+            Var olan tüm kollar (chunk-worker ayarı, hızlı chunk yükleme, GPU Tasarrufları grubu, canlı render ayarları, arka plan ve menü FPS sınırları) değişmedi ve orijinal ayarlarını yakalayıp geri yüklemeye devam ediyor — yeniden başlatmalarda bile.
 
             İki jar: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) ya da `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Tam Türkçe ve İngilizce yerelleştirme. GPUTape, AsyncParticles, Dynamic FPS ve FPS Reducer ile uyumluluğu doğrulandı.
             ````
