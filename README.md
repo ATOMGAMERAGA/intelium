@@ -36,7 +36,7 @@ in `src/main/resources/assets/intelium/icon.png`.
 | Optimization profile | **Max FPS / Balanced / Smooth** — shifts the chunk-worker trade-off toward peak frame rate or toward steady frame times while walking and turning. |
 | Adaptive performance | **Adaptive Render Distance** holds a user-set FPS target by stepping the render distance down when FPS stays low and back up when there is headroom (hysteresis + hold timers, never below half your setting); when FPS collapses far below the target it reacts ~4× faster (halved hold, two chunks per step). **Background FPS Limit** caps the frame rate while the window is unfocused and restores your limit the instant focus returns. **Menu FPS Limit** does the same while a menu is open — frames nobody needs at full rate. |
 | Stutter visibility | The overlay shows the **1% low** and **minimum** FPS over the last few seconds, so you can see hitches, not just the headline average. |
-| GPU detection | Identifies the exact Intel generation from the GL renderer string on both Windows drivers and Linux/Mesa, and reports support status in-game and in the log. |
+| GPU detection | Identifies the exact Intel generation from the GL renderer string on Windows drivers, Linux/Mesa, and VirGL virtual GPUs (ChromeOS Crostini / Linux VMs) that pass the host renderer through, and reports support status in-game and in the log. |
 | Honest gating | Disables itself cleanly on NVIDIA / AMD / unrecognized / too-old GPUs. A Mixin config plugin checks each hook's Sodium target at load time, so any compatible Sodium version works and incompatible internals self-disable instead of crashing. |
 
 > **Why these levers and not draw-call batching / persistent buffers?**
@@ -59,8 +59,8 @@ contains both; pick the one matching your Minecraft version.
 
 | Jar | Minecraft | Java | Renderer | Sodium |
 |---|---|---|---|---|
-| `Intelium-v1.2.4-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
-| `Intelium-v1.2.4-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
+| `Intelium-v1.2.5-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
+| `Intelium-v1.2.5-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
 
 - Fabric Loader **0.18.3+**
 - Fabric API
@@ -81,7 +81,7 @@ ordered oldest to newest.
 |---|---|---|---|
 | Gen 9 Skylake | Gen 9 | 2015 | HD Graphics 510, 515, 520, 530 · Iris Graphics 540, 550 · Iris Pro 580 |
 | Gen 9.5 Kaby / Coffee / Comet Lake | Gen 9.5 | 2016–2020 | HD / UHD Graphics 610, 620, 630 |
-| Gen 11 Ice Lake | Gen 11 | 2019 | Iris Plus Graphics G4, G7 |
+| Gen 11 Ice Lake | Gen 11 | 2019 | UHD Graphics G1 · Iris Plus Graphics G4, G7 |
 | Xe-LP | Gen 12 | 2020–2023 | Iris Xe Graphics (Tiger / Alder Lake) · UHD Graphics 710, 730, 750, 770 · Iris Xe MAX (DG1) |
 | Arc Alchemist | Xe-HPG | 2022 | Arc A310, A380, A580, A750, A770 · mobile A350M–A770M · Pro A30M–A60 |
 | Core Ultra integrated Arc | Xe-LPG / Xe2-LPG | 2023–2024 | Intel Arc Graphics (Meteor Lake, Lunar Lake) |

@@ -89,4 +89,79 @@ class DetectionDecisionTest {
         assertFalse(r.compatible);
         assertEquals("intelium.disabled.unknown_gpu", r.reasonKey);
     }
+
+    // ===== Issue #9: Ice Lake UHD Graphics G1 =====
+
+    @Test
+    @DisplayName("UHD Graphics G1 (Ice Lake) is active as Gen 11, not 'too old'")
+    void uhdG1Active() {
+        IntelGpuClassifier.Result r = decide("Intel", "Intel(R) UHD Graphics G1");
+        assertTrue(r.compatible);
+        assertNull(r.reasonKey);
+        assertEquals(IntelGpuGeneration.GEN11_ICE_LAKE, r.generation);
+    }
+
+    @Test
+    @DisplayName("Bare 'Intel(R) UHD Graphics' is active (conservative Gen 9.5), not 'too old'")
+    void bareUhdActive() {
+        IntelGpuClassifier.Result r = decide("Intel", "Intel(R) UHD Graphics");
+        assertTrue(r.compatible);
+        assertEquals(IntelGpuGeneration.GEN9_5_KABY_COFFEE, r.generation);
+    }
+
+    // ===== Issue #7: VirGL virtual GPUs (ChromeOS Crostini / Linux VMs) =====
+
+    @Test
+    @DisplayName("VirGL with host Intel renderer passed through is active")
+    void virglIntelPassthroughActive() {
+        IntelGpuClassifier.Result r = decide("Red Hat",
+                "virgl (Mesa Intel(R) UHD Graphics 600 (GLK 2))");
+        assertTrue(r.compatible);
+        assertNull(r.reasonKey);
+        assertEquals(IntelGpuGeneration.GEN9_5_KABY_COFFEE, r.generation);
+    }
+
+    @Test
+    @DisplayName("VirGL with a supported Gen 12 host part is active as Gen 12")
+    void virglGen12PassthroughActive() {
+        IntelGpuClassifier.Result r = decide("Red Hat",
+                "virgl (Mesa Intel(R) Xe Graphics (TGL GT2))");
+        assertTrue(r.compatible);
+        assertEquals(IntelGpuGeneration.GEN12_XE_LP, r.generation);
+    }
+
+    @Test
+    @DisplayName("Bare 'virgl' with the host GPU hidden is disabled with the virgl reason")
+    void virglHiddenHostDisabled() {
+        IntelGpuClassifier.Result r = decide("Red Hat", "virgl");
+        assertFalse(r.compatible);
+        assertEquals("intelium.disabled.virgl", r.reasonKey);
+        assertEquals(IntelGpuGeneration.UNKNOWN, r.generation);
+    }
+
+    @Test
+    @DisplayName("VirGL with an NVIDIA host GPU is refused with the nvidia reason")
+    void virglNvidiaHostRefused() {
+        IntelGpuClassifier.Result r = decide("Red Hat", "virgl (NVIDIA GeForce GTX 1650)");
+        assertFalse(r.compatible);
+        assertEquals("intelium.disabled.nvidia", r.reasonKey);
+    }
+
+    @Test
+    @DisplayName("VirGL with an AMD host GPU is refused with the amd reason")
+    void virglAmdHostRefused() {
+        IntelGpuClassifier.Result r = decide("Red Hat", "virgl (AMD Radeon Vega 8)");
+        assertFalse(r.compatible);
+        assertEquals("intelium.disabled.amd", r.reasonKey);
+    }
+
+    @Test
+    @DisplayName("VirGL with a too-old Intel host GPU is disabled with too_old")
+    void virglTooOldHostDisabled() {
+        IntelGpuClassifier.Result r = decide("Red Hat",
+                "virgl (Mesa Intel(R) HD Graphics 4000 (IVB GT2))");
+        assertFalse(r.compatible);
+        assertEquals("intelium.disabled.too_old", r.reasonKey);
+        assertEquals(IntelGpuGeneration.PRE_GEN9, r.generation);
+    }
 }

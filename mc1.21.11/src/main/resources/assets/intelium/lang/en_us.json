@@ -102,6 +102,7 @@
     "intelium.disabled.nvidia": "NVIDIA GPU detected - Intelium is for Intel GPUs only. Use Nvidium instead.",
     "intelium.disabled.amd": "AMD GPU detected - Intelium is for Intel GPUs only.",
     "intelium.disabled.unknown_gpu": "Unknown GPU vendor - Intelium requires Intel.",
+    "intelium.disabled.virgl": "VirGL virtual GPU detected but the host GPU is hidden - cannot confirm an Intel GPU. Update the VM/container's Mesa and virglrenderer so the host renderer is passed through.",
     "intelium.disabled.unrecognized_intel": "Intel GPU not recognized - staying out of the way to avoid instability.",
     "intelium.disabled.too_old": "Intel GPU is older than HD Graphics 520 (Gen 9 / Skylake). Sodium baseline will be used.",
     "intelium.disabled.sodium_missing": "Sodium not loaded - Intelium cannot run without Sodium.",
