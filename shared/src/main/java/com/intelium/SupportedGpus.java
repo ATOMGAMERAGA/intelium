@@ -28,7 +28,7 @@ public final class SupportedGpus {
                     "HD / UHD Graphics 610, 620, 630"),
             new Family(
                     "Gen 11 Ice Lake", "Gen 11", "2019",
-                    "Iris Plus Graphics G4, G7"),
+                    "UHD Graphics G1 · Iris Plus Graphics G4, G7"),
             new Family(
                     "Xe-LP", "Gen 12", "2020–2023",
                     "Iris Xe Graphics (Tiger / Alder Lake) · UHD Graphics 710, 730, 750, 770 "

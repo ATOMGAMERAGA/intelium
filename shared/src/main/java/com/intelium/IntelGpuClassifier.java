@@ -16,6 +16,11 @@ import java.util.Locale;
  * Broadwell and back - is recognized but reported unsupported. Unrecognized Intel
  * parts and all non-Intel vendors are reported unsupported; Intelium never
  * guesses a tuning profile for hardware it cannot place.
+ *
+ * <p>VirGL virtual GPUs (ChromeOS Crostini, Linux VMs) report a virtualization
+ * vendor rather than Intel; when the host renderer is embedded in the renderer
+ * string it is classified as if native, otherwise Intelium reports that the
+ * host GPU is hidden.
  */
 public final class IntelGpuClassifier {
 
@@ -41,6 +46,28 @@ public final class IntelGpuClassifier {
      */
     public static Result decide(String vendor, String renderer) {
         String v = vendor == null ? "" : vendor.toLowerCase(Locale.ROOT);
+        String r = renderer == null ? "" : renderer.toLowerCase(Locale.ROOT);
+
+        // VirGL (ChromeOS Crostini and other VM/container guests) reports a
+        // virtualization vendor ("Red Hat") instead of the host GPU's. Recent
+        // virglrenderer builds embed the host renderer in the renderer string,
+        // e.g. "virgl (Mesa Intel(R) UHD Graphics 600 (GLK 2))", so decide from
+        // that instead of refusing on the vendor.
+        if (r.contains("virgl") || v.contains("virgl") || v.contains("red hat")) {
+            if (r.contains("nvidia") || r.contains("geforce")) {
+                return new Result(IntelGpuGeneration.UNKNOWN, false, "intelium.disabled.nvidia");
+            }
+            if (r.contains("amd") || r.contains("radeon")) {
+                return new Result(IntelGpuGeneration.UNKNOWN, false, "intelium.disabled.amd");
+            }
+            if (r.contains("intel")) {
+                return decideIntel(classifyIntelRenderer(renderer));
+            }
+            // Old virglrenderer: bare "virgl" with the host GPU hidden. Cannot
+            // confirm Intel hardware, so stay out of the way with a reason that
+            // tells the user how to get the host renderer passed through.
+            return new Result(IntelGpuGeneration.UNKNOWN, false, "intelium.disabled.virgl");
+        }
 
         // Confirmed non-Intel vendors are always refused - applying Intel
         // profiles to NVIDIA/AMD silicon is never correct.
@@ -55,8 +82,11 @@ public final class IntelGpuClassifier {
             return new Result(IntelGpuGeneration.UNKNOWN, false, "intelium.disabled.unknown_gpu");
         }
 
-        IntelGpuGeneration gen = classifyIntelRenderer(renderer);
+        return decideIntel(classifyIntelRenderer(renderer));
+    }
 
+    /** Shared tail of {@link #decide}: turns a classified Intel generation into a Result. */
+    private static Result decideIntel(IntelGpuGeneration gen) {
         // Unrecognized Intel part: stay out of the way rather than guess.
         if (gen == IntelGpuGeneration.UNKNOWN) {
             return new Result(IntelGpuGeneration.UNKNOWN, false,
@@ -119,7 +149,12 @@ public final class IntelGpuClassifier {
         }
 
         // ---- Gen 11 Ice Lake (before generic "xe" so Iris Plus is caught) ----
-        if (r.contains("iris plus") || r.contains("ice lake") || r.contains("icl")) {
+        // Ice Lake iGPUs are tiered "UHD Graphics G1" / "Iris Plus Graphics
+        // G4/G7" on Windows; Jasper/Elkhart Lake are the same Gen 11 IP.
+        if (r.contains("iris plus") || r.contains("ice lake") || r.contains("icl")
+                || r.matches(".*\\bgraphics g[147]\\b.*")
+                || r.contains("jasper lake") || r.contains("jsl")
+                || r.contains("elkhart lake") || r.contains("ehl")) {
             return IntelGpuGeneration.GEN11_ICE_LAKE;
         }
 
@@ -162,6 +197,16 @@ public final class IntelGpuClassifier {
         if (r.matches(".*\\bgraphics 5[0-8]\\d\\b.*")
                 || r.contains("skylake") || r.contains("skl")) {
             return IntelGpuGeneration.GEN9_SKYLAKE;
+        }
+
+        // Bare "UHD Graphics" with no number or tier suffix. The UHD brand
+        // started with Gen 9.5 (2017) and is what Windows reports for many
+        // Ice/Comet/Jasper Lake and low-EU Gen 12 parts, so it is never
+        // pre-Skylake silicon. Classify at the oldest UHD generation - its
+        // conservative profile is safe on every newer part. This must stay
+        // above the bare "hd graphics" check, which matches it as a substring.
+        if (r.contains("uhd graphics")) {
+            return IntelGpuGeneration.GEN9_5_KABY_COFFEE;
         }
 
         // Bare "Intel HD Graphics" with no model number is the original

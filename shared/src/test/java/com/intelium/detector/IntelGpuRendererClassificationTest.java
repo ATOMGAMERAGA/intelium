@@ -114,6 +114,38 @@ class IntelGpuRendererClassificationTest {
         assertEquals(IntelGpuGeneration.GEN11_ICE_LAKE, classify(renderer));
     }
 
+    // ===== Gen 11 tiered branding (issue #9) and Gen 11 Atom-class parts =====
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Intel(R) UHD Graphics G1",
+            "Intel(R) UHD Graphics G1 (Ice Lake)",
+            "Intel(R) Iris(R) Plus Graphics G4",
+            "Intel(R) Iris(R) Plus Graphics G7",
+            "Mesa Intel(R) UHD Graphics (ICL GT1)",
+            "Mesa Intel(R) UHD Graphics (JSL)",
+            "Jasper Lake UHD Graphics",
+            "Elkhart Lake Graphics"
+    })
+    @DisplayName("UHD G1 / Iris Plus G4-G7 / Jasper / Elkhart Lake map to GEN11_ICE_LAKE (issue #9)")
+    void classifyGen11TieredBranding(String renderer) {
+        assertEquals(IntelGpuGeneration.GEN11_ICE_LAKE, classify(renderer));
+    }
+
+    // ===== Bare "UHD Graphics" is never pre-Gen9 (UHD branding began with Gen 9.5) =====
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Intel(R) UHD Graphics",
+            "Mesa Intel(R) UHD Graphics",
+            "Intel(R) UHD Graphics 600",
+            "Intel(R) UHD Graphics 605"
+    })
+    @DisplayName("Bare/Gemini-Lake 'UHD Graphics' falls back to GEN9_5, not PRE_GEN9")
+    void bareUhdIsNotPreGen9(String renderer) {
+        assertEquals(IntelGpuGeneration.GEN9_5_KABY_COFFEE, classify(renderer));
+    }
+
     // ===== Gen 12 Xe-LP (incl. UHD 7xx and integrated Arc) =====
 
     @ParameterizedTest

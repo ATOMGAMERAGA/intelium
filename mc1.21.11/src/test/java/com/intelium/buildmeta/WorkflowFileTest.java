@@ -64,22 +64,22 @@ class WorkflowFileTest {
     }
 
     @Test
-    @DisplayName("Workflow publishes the fixed 1.2.4 release")
+    @DisplayName("Workflow publishes the fixed 1.2.5 release")
     void usesFixedVersion() {
-        assertTrue(content.contains("1.2.4"), "release version must be 1.2.4");
-        assertTrue(content.contains("v${{ env.INTELIUM_VERSION }}") || content.contains("v1.2.4"),
-                "release must be tagged v1.2.4");
+        assertTrue(content.contains("1.2.5"), "release version must be 1.2.5");
+        assertTrue(content.contains("v${{ env.INTELIUM_VERSION }}") || content.contains("v1.2.5"),
+                "release must be tagged v1.2.5");
         assertTrue(content.contains("prerelease: false"),
-                "1.2.4 must be a full release, not a prerelease");
+                "1.2.5 must be a full release, not a prerelease");
     }
 
     @Test
     @DisplayName("Release attaches both per-version jars")
     void attachesBothJars() {
-        assertTrue(content.contains("Intelium-v1.2.4-1.21.11.jar")
+        assertTrue(content.contains("Intelium-v1.2.5-1.21.11.jar")
                         || content.contains("-1.21.11.jar"),
                 "must attach the 1.21.11 jar");
-        assertTrue(content.contains("Intelium-v1.2.4-26.x.jar")
+        assertTrue(content.contains("Intelium-v1.2.5-26.x.jar")
                         || content.contains("-26.x.jar"),
                 "must attach the 26.x jar");
     }
