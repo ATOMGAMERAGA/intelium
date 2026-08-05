@@ -108,6 +108,33 @@ class InteliumConfigTest {
     }
 
     @Test
+    @DisplayName("Render Budget Engine defaults: on, all three Balanced, adaptive on")
+    void renderBudgetDefaults() {
+        InteliumConfig c = new InteliumConfig();
+        assertTrue(c.renderBudget);
+        assertTrue(c.adaptiveCulling);
+        assertEquals("balanced", c.entityCulling);
+        assertEquals("balanced", c.blockEntityCulling);
+        assertEquals("balanced", c.particleBudget);
+    }
+
+    @Test
+    @DisplayName("Sanitize repairs a hand-edited culling level instead of leaving it")
+    void sanitizeNormalisesCullingLevels() {
+        InteliumConfig c = new InteliumConfig();
+        c.entityCulling = "EXTREME";
+        c.blockEntityCulling = "  Aggressive ";
+        c.particleBudget = null;
+        InteliumConfig.sanitize(c);
+        // Unreadable: off, and written back as such so the file stops lying.
+        assertEquals("off", c.entityCulling);
+        // Readable, just untidy.
+        assertEquals("aggressive", c.blockEntityCulling);
+        // Missing: the shipped default.
+        assertEquals("balanced", c.particleBudget);
+    }
+
+    @Test
     @DisplayName("Default profile is balanced")
     void defaultProfile() {
         assertEquals("balanced", new InteliumConfig().profile);

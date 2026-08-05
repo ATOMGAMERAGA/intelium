@@ -149,11 +149,15 @@ public final class RenderBudgetTuning {
      * Scales a count budget down under the same pressure: unchanged at zero,
      * halved at full. Never returns less than {@code floor}, and passes 0
      * (unlimited) straight through.
+     *
+     * <p>Where a floor above the base budget would contradict it, the base wins:
+     * a method called "tighten" must never hand back more room than it was
+     * given, whatever the floor says.
      */
     public static int tightenBudget(int baseBudget, double pressure, int floor) {
         if (baseBudget <= 0) return 0;
         int scaled = (int) Math.round(baseBudget / (1.0 + clamp(pressure, 0.0, 1.0)));
-        return Math.max(Math.max(1, floor), scaled);
+        return Math.min(baseBudget, Math.max(Math.max(1, floor), scaled));
     }
 
     private static double clamp(double v, double lo, double hi) {
