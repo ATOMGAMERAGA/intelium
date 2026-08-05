@@ -79,6 +79,33 @@ class FrameBudgetTest {
     }
 
     @Test
+    @DisplayName("A frame boundary is still found at 1000 FPS")
+    void boundaryFoundAtHighFrameRates() {
+        // Regression: with a threshold near a millisecond, a fast machine's
+        // inter-frame gap slips under it, the count never resets, and every
+        // block entity past the limit is refused from then on - chests and
+        // signs simply stop drawing. The gap must sit far below any real frame.
+        assertEquals(4, drawWithinFrame(10, 4));
+        clock += 1_000_000L; // 1 ms later: the next frame at 1000 FPS
+        assertTrue(budget.tryConsume(clock, 4), "1 ms of silence is a new frame");
+    }
+
+    @Test
+    @DisplayName("A window that never sees a gap is force-rolled rather than stuck")
+    void windowCannotGetStuck() {
+        // Belt and braces: even if the gap test somehow never fires, the count
+        // must not stay exhausted forever.
+        assertEquals(4, drawWithinFrame(10, 4));
+        int allowed = 0;
+        for (int i = 0; i < 40_000; i++) {
+            clock += WITHIN_FRAME; // 1 us apart: never a gap, over 40 ms of it
+            if (budget.tryConsume(clock, 4)) allowed++;
+        }
+        assertTrue(allowed >= 4,
+                "an accounting window must not stay open indefinitely; allowed " + allowed);
+    }
+
+    @Test
     @DisplayName("A clock that jumps backwards costs one frame, not correctness")
     void backwardsClock() {
         assertEquals(4, drawWithinFrame(10, 4));

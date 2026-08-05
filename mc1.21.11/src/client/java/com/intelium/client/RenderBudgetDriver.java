@@ -1,8 +1,10 @@
 package com.intelium.client;
 
 import com.intelium.Intelium;
+import com.intelium.compat.ModCompat;
 import com.intelium.config.InteliumConfig;
 import com.intelium.config.InteliumConfigIO;
+import com.intelium.hud.AbBenchmark;
 import com.intelium.optimization.CullingStrength;
 import com.intelium.optimization.FramePressure;
 import com.intelium.optimization.RenderBudget;
@@ -38,8 +40,33 @@ public final class RenderBudgetDriver {
         // A fresh tick's particle allowance, whether or not the budget is on -
         // so turning it on mid-explosion starts from a clean count.
         RenderBudget.beginTick();
-        PRESSURE.push(client.getCurrentFps());
+        if (measurable(client)) {
+            PRESSURE.push(client.getCurrentFps());
+        }
         reconcile(client);
+    }
+
+    /**
+     * Whether this tick's frame rate says anything about how hard the machine
+     * is working.
+     *
+     * <p>It does not when the window is unfocused or a menu is open with a cap
+     * on it: those frames are deliberately throttled, and counting them would
+     * peg the pressure signal at maximum, so alt-tabbing back would land you in
+     * the most aggressive culling the settings allow for a second or two. Nor
+     * during the A/B benchmark, which switches Intelium off and on underneath
+     * us. Skipping the sample holds the last reading rather than resetting it,
+     * so the budgets sit still instead of swinging - the same treatment
+     * {@link AdaptiveDistance} gives the render-distance controller.
+     */
+    private static boolean measurable(MinecraftClient client) {
+        if (!client.isWindowFocused()) return false;
+        if (AbBenchmark.INSTANCE.isRunning()) return false;
+        InteliumConfig cfg = InteliumConfigIO.get();
+        boolean menuCapped = cfg.menuFpsLimit > 0
+                && client.currentScreen != null
+                && !ModCompat.frameLimiterPresent();
+        return !menuCapped;
     }
 
     /**

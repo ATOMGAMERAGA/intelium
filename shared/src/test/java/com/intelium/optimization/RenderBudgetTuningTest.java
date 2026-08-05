@@ -175,7 +175,19 @@ class RenderBudgetTuningTest {
     @DisplayName("A budget never falls below its floor")
     void budgetFloor() {
         assertEquals(64, RenderBudgetTuning.tightenBudget(65, 1.0, 64));
-        assertEquals(64, RenderBudgetTuning.tightenBudget(1, 1.0, 64));
+        assertEquals(64, RenderBudgetTuning.tightenBudget(128, 1.0, 64));
+    }
+
+    @Test
+    @DisplayName("Tightening never hands back more room than it was given")
+    void tighteningNeverLoosens() {
+        // A floor above the base budget must not turn "tighten" into "loosen".
+        assertEquals(1, RenderBudgetTuning.tightenBudget(1, 1.0, 64));
+        assertEquals(10, RenderBudgetTuning.tightenBudget(10, 0.0, 512));
+        for (int base = 1; base <= 600; base++) {
+            assertTrue(RenderBudgetTuning.tightenBudget(base, 0.5, 64) <= base,
+                    "tightening raised the budget at base " + base);
+        }
     }
 
     @Test
