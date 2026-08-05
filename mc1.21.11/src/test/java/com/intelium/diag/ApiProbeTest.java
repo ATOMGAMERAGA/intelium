@@ -19,11 +19,11 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 /**
- * TEMPORARY diagnostic. Finds the classes Intelium's mixins target by scanning
- * the Minecraft jar for them - the render dispatchers have moved packages more
- * than once - and dumps their method names and JVM descriptors, so the mixin
- * {@code method = "..."} selectors can be written against reality rather than
- * guessed. Deleted once the descriptors are pinned down.
+ * TEMPORARY diagnostic. Finds the classes Intelium's culling hooks could target
+ * by scanning the Minecraft jar - the render path has been restructured more
+ * than once and the old dispatchers are gone - and dumps their method names and
+ * JVM descriptors, so the mixin {@code method = "..."} selectors can be written
+ * against reality rather than guessed. Deleted once the hooks are pinned down.
  */
 @DisplayName("API probe (temporary)")
 class ApiProbeTest {
@@ -31,15 +31,26 @@ class ApiProbeTest {
     /** A class that is certainly in the Minecraft jar, used to find the jar. */
     private static final String SEED = "net.minecraft.client.particle.Particle";
 
-    /** Simple-name fragments of the classes worth looking at. */
+    /** Simple-name fragments worth listing. */
     private static final String[] CLASS_FILTERS = {
-            "RenderDispatcher", "EntityRenderers", "BlockEntityRenderers",
+            "EntityRender", "RenderDispatcher", "WorldRenderer", "LevelRenderer",
+            "ParticleManager", "ParticleEngine", "RenderCommandQueue",
     };
+
+    /** Simple names whose full method list is worth printing. */
+    private static final List<String> DUMP_ALL = List.of(
+            "EntityRenderer", "BlockEntityRenderer", "EntityRenderDispatcher",
+            "BlockEntityRenderDispatcher", "ParticleManager", "ParticleEngine");
+
+    /** Simple names where only entity-ish methods are worth printing. */
+    private static final List<String> DUMP_ENTITY_ONLY = List.of(
+            "WorldRenderer", "LevelRenderer", "OrderedRenderCommandQueue",
+            "OrderedRenderCommandQueueImpl");
 
     @Test
     @DisplayName("Dump mixin target signatures")
     void dump() {
-        StringBuilder sb = new StringBuilder("\n===== INTELIUM API PROBE (1.21.11) =====\n");
+        StringBuilder sb = new StringBuilder("\n===== INTELIUM API PROBE =====\n");
         TreeSet<String> candidates = new TreeSet<>();
         try {
             candidates.addAll(scanForClasses());
@@ -51,7 +62,11 @@ class ApiProbeTest {
         for (String name : candidates) sb.append("  ").append(name).append('\n');
 
         for (String name : candidates) {
-            if (!name.contains("RenderDispatcher")) continue;
+            String simple = name.substring(name.lastIndexOf('.') + 1);
+            boolean all = DUMP_ALL.contains(simple);
+            boolean entityOnly = DUMP_ENTITY_ONLY.contains(simple);
+            if (!all && !entityOnly) continue;
+
             sb.append("\n--- ").append(name).append('\n');
             Class<?> c;
             try {
@@ -62,6 +77,10 @@ class ApiProbeTest {
             }
             List<String> lines = new ArrayList<>();
             for (Method m : c.getDeclaredMethods()) {
+                if (entityOnly && !m.getName().toLowerCase(java.util.Locale.ROOT)
+                        .contains("ntit")) {
+                    continue;
+                }
                 lines.add("  " + (Modifier.isStatic(m.getModifiers()) ? "static " : "")
                         + m.getName() + descriptor(m));
             }
