@@ -84,6 +84,8 @@ class InteliumConfigTest {
                 "disableVsync", "disableMenuBlur", "maxRenderDistance", "maxSimulationDistance",
                 "adaptiveRenderDistance", "adaptiveFpsTarget", "backgroundFpsLimit",
                 "menuFpsLimit",
+                "renderBudget", "entityCulling", "blockEntityCulling",
+                "particleBudget", "adaptiveCulling",
                 "overlayEnabled", "overlayCompact", "overlayShowLows",
                 "overlayShowFrameTime", "overlayX", "overlayY",
                 "captured"
