@@ -260,9 +260,13 @@ public class InteliumConfig {
         if (cfg.profile == null) cfg.profile = defaults.profile;
         if (cfg.chunkLoadingMode == null) cfg.chunkLoadingMode = defaults.chunkLoadingMode;
         if (cfg.cloudsMode == null) cfg.cloudsMode = defaults.cloudsMode;
-        if (cfg.entityCulling == null) cfg.entityCulling = defaults.entityCulling;
-        if (cfg.blockEntityCulling == null) cfg.blockEntityCulling = defaults.blockEntityCulling;
-        if (cfg.particleBudget == null) cfg.particleBudget = defaults.particleBudget;
+        // Normalise the culling levels rather than merely null-check them: an
+        // unrecognised value already reads as "off" everywhere, so leaving the
+        // original string in the file would keep showing a setting that is off
+        // while the file claims otherwise, forever.
+        cfg.entityCulling = normalizeLevel(cfg.entityCulling, defaults.entityCulling);
+        cfg.blockEntityCulling = normalizeLevel(cfg.blockEntityCulling, defaults.blockEntityCulling);
+        cfg.particleBudget = normalizeLevel(cfg.particleBudget, defaults.particleBudget);
         cfg.chunkBuildWorkers = clamp(cfg.chunkBuildWorkers, 0, 16);
         cfg.maxEntityDistancePercent = clamp(cfg.maxEntityDistancePercent, 50, 100);
         cfg.maxRenderDistance = cfg.maxRenderDistance <= 0
@@ -282,5 +286,15 @@ public class InteliumConfig {
 
     private static int clamp(int v, int lo, int hi) {
         return Math.max(lo, Math.min(hi, v));
+    }
+
+    /**
+     * A missing level falls back to the shipped default; a present but
+     * unrecognised one falls back to "off", because a value nobody can read
+     * must never be taken as permission to change what the player sees.
+     */
+    private static String normalizeLevel(String value, String fallback) {
+        if (value == null) return fallback;
+        return com.intelium.optimization.CullingStrength.fromKey(value).key;
     }
 }
