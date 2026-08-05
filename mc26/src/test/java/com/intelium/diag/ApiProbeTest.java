@@ -54,9 +54,17 @@ class ApiProbeTest {
             lines.stream().sorted().forEach(l -> sb.append(l).append('\n'));
         }
         sb.append("\n===== END PROBE =====\n");
-        // stderr, not an assertion: Gradle's testLogging surfaces standardError
-        // in the CI log, while assertion messages only land in the HTML report.
-        System.err.println(sb);
+        // A file, not stdout or an assertion: Gradle swallows both a passing
+        // test's streams and a failing test's message, so the workflow cats
+        // this file instead.
+        try {
+            java.nio.file.Path out = java.nio.file.Paths.get(
+                    System.getProperty("project.rootDir", "."), "build", "api-probe.txt");
+            java.nio.file.Files.createDirectories(out.getParent());
+            java.nio.file.Files.writeString(out, sb.toString());
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private static boolean matches(String name, String filter) {

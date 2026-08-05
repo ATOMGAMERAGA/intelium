@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INTELIUM_VERSION: "1.2.5"
+  INTELIUM_VERSION: "1.2.6"
 
 jobs:
   build:
@@ -36,11 +36,11 @@ jobs:
           - target: mc1.21.11
             java: '21'
             label: '1.21.11'
-            jarname: 'Intelium-v1.2.5-1.21.11.jar'
+            jarname: 'Intelium-v1.2.6-1.21.11.jar'
           - target: mc26
             java: '25'
             label: '26.x'
-            jarname: 'Intelium-v1.2.5-26.x.jar'
+            jarname: 'Intelium-v1.2.6-26.x.jar'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,6 +74,7 @@ jobs:
           ./${{ matrix.target }}/gradlew -p ${{ matrix.target }} test \
             --tests 'com.intelium.diag.ApiProbeTest' --rerun \
             --no-daemon
+          cat ${{ matrix.target }}/build/api-probe.txt
 
       - name: Collect the mod jar
         run: |
