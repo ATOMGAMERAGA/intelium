@@ -142,7 +142,39 @@ class RenderBudgetTest {
         assertFalse(RenderBudget.shouldCullEntity(0.25, 1e6));
     }
 
+    @Test
+    @DisplayName("Turning entity culling off says nothing about chests, and vice versa")
+    void entityAndBlockEntityThresholdsAreIndependent() {
+        engage(CullingStrength.OFF, CullingStrength.AGGRESSIVE, CullingStrength.OFF,
+                false, 0.0);
+        assertFalse(RenderBudget.entityCullingOn());
+        assertFalse(RenderBudget.shouldCullEntity(0.25, 1e6));
+        assertTrue(RenderBudget.shouldCullBlockEntity(1e6),
+                "the block-entity level must drive block-entity culling");
+
+        engage(CullingStrength.AGGRESSIVE, CullingStrength.OFF, CullingStrength.OFF,
+                false, 0.0);
+        assertTrue(RenderBudget.shouldCullEntity(0.25, 1e6));
+        assertFalse(RenderBudget.shouldCullBlockEntity(1e6));
+    }
+
     // ---- Block-entity budget ----------------------------------------------
+
+    @Test
+    @DisplayName("A block entity is measured as the block-sized thing it is")
+    void blockEntityIsBlockSized() {
+        engage(CullingStrength.BALANCED);
+        // Balanced is 12px: a one-block object at 1080p survives to ~64 blocks.
+        assertFalse(RenderBudget.shouldCullBlockEntity(40.0 * 40.0));
+        assertTrue(RenderBudget.shouldCullBlockEntity(120.0 * 120.0));
+    }
+
+    @Test
+    @DisplayName("A block entity underfoot is never culled by distance")
+    void nearBlockEntitiesAreSafe() {
+        engage(CullingStrength.AGGRESSIVE);
+        assertFalse(RenderBudget.shouldCullBlockEntity(4.0));
+    }
 
     @Test
     @DisplayName("A storage room is capped at the budget; a normal room is untouched")

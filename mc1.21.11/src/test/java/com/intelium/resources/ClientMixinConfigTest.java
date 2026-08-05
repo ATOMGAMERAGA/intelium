@@ -60,6 +60,16 @@ class ClientMixinConfigTest {
     }
 
     @Test
+    @DisplayName("required is false - a budget that cannot attach must not take the game with it")
+    void notRequired() {
+        // Every hook in this config is an optimization, never a prerequisite.
+        // If a future Minecraft reshapes one of the methods badly enough that
+        // Mixin cannot apply the hook at all, the right outcome is one lost
+        // budget and a line in the log, not a game that refuses to start.
+        assertFalse(mixins.get("required").getAsBoolean());
+    }
+
+    @Test
     @DisplayName("package is com.intelium.mixin.client")
     void packageName() {
         assertEquals("com.intelium.mixin.client", mixins.get("package").getAsString());

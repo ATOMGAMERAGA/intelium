@@ -30,9 +30,13 @@ public final class RenderBudget {
     /** Never squeeze the particle spawn budget below this. */
     private static final int PARTICLE_FLOOR = 128;
 
+    /** A block entity is a block: one block tall, by definition. */
+    private static final double BLOCK_ENTITY_SIZE = 1.0;
+
     private static volatile boolean active;
     private static volatile double pixelScale;
     private static volatile double entityMinPixels;
+    private static volatile double blockEntityMinPixels;
     private static volatile int blockEntityLimit;
     private static volatile int particleLimit;
 
@@ -65,6 +69,11 @@ public final class RenderBudget {
         pixelScale = RenderBudgetTuning.pixelScale(framebufferHeight, fovDegrees);
         entityMinPixels = RenderBudgetTuning.tightenThreshold(
                 RenderBudgetTuning.entityMinPixels(entities), p);
+        // Block entities get the same apparent-size scale, but read it off
+        // their own level: whoever turns entity culling off has not thereby
+        // said anything about chests.
+        blockEntityMinPixels = RenderBudgetTuning.tightenThreshold(
+                RenderBudgetTuning.entityMinPixels(blockEntities), p);
         blockEntityLimit = RenderBudgetTuning.tightenBudget(
                 RenderBudgetTuning.blockEntityBudget(blockEntities), p, BLOCK_ENTITY_FLOOR);
         particleLimit = RenderBudgetTuning.tightenBudget(
@@ -80,6 +89,7 @@ public final class RenderBudget {
     public static void disable() {
         active = false;
         entityMinPixels = 0.0;
+        blockEntityMinPixels = 0.0;
         blockEntityLimit = 0;
         particleLimit = 0;
         BLOCK_ENTITIES.reset();
@@ -114,6 +124,18 @@ public final class RenderBudget {
     /** Whether the block-entity budget is doing anything. */
     public static boolean blockEntityBudgetOn() {
         return active && blockEntityLimit > 0;
+    }
+
+    /**
+     * Whether a block entity {@code distanceSq} squared blocks from the camera
+     * is too small on screen to be worth drawing. Same apparent-size test the
+     * entity budget uses, against a one-block-tall object, but driven by the
+     * block-entity level rather than the entity one.
+     */
+    public static boolean shouldCullBlockEntity(double distanceSq) {
+        if (!active) return false;
+        return RenderBudgetTuning.tooSmallToDraw(BLOCK_ENTITY_SIZE, distanceSq,
+                pixelScale, blockEntityMinPixels);
     }
 
     /**
@@ -170,6 +192,11 @@ public final class RenderBudget {
     /** The effective minimum on-screen entity height, in pixels. 0 = off. */
     public static double effectiveEntityMinPixels() {
         return entityMinPixels;
+    }
+
+    /** The effective minimum on-screen block-entity height, in pixels. 0 = off. */
+    public static double effectiveBlockEntityMinPixels() {
+        return blockEntityMinPixels;
     }
 
     /** The effective per-frame block-entity ceiling. 0 = unlimited. */

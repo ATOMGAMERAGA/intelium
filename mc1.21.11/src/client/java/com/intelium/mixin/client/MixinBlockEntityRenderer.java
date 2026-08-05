@@ -44,8 +44,7 @@ public interface MixinBlockEntityRenderer {
         double dz = pos.getZ() + 0.5 - cameraPos.z;
         double distanceSq = dx * dx + dy * dy + dz * dz;
 
-        // A block entity is a block: one block tall, by definition.
-        if (RenderBudget.shouldCullEntity(1.0, distanceSq)) {
+        if (RenderBudget.shouldCullBlockEntity(distanceSq)) {
             cir.setReturnValue(false);
             return;
         }
