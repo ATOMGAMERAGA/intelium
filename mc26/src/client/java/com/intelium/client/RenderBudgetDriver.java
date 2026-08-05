@@ -84,10 +84,19 @@ public final class RenderBudgetDriver {
             PRESSURE.reset();
             return;
         }
+        // Yield the particle budget to AsyncParticles when it is installed, the
+        // same way the vanilla particle lever does: it owns particle
+        // performance from its own worker threads, and it warns about mods that
+        // manipulate particles underneath it. The other two budgets touch
+        // nothing it cares about.
+        CullingStrength particles = ModCompat.asyncParticlesPresent()
+                ? CullingStrength.OFF
+                : CullingStrength.fromKey(cfg.particleBudget);
+
         RenderBudget.update(true, framebufferHeight(client), fov(client),
                 CullingStrength.fromKey(cfg.entityCulling),
                 CullingStrength.fromKey(cfg.blockEntityCulling),
-                CullingStrength.fromKey(cfg.particleBudget),
+                particles,
                 cfg.adaptiveCulling,
                 PRESSURE.pressure(cfg.adaptiveFpsTarget));
     }

@@ -6,12 +6,12 @@ import net.fabricmc.loader.api.FabricLoader;
 /**
  * Detects other performance mods that Intelium must not fight.
  *
- * <p>Intelium deliberately stays narrow - it only tunes Sodium's chunk workers,
- * Sodium's defer mode, and a handful of vanilla {@code GameOptions}. It never
- * touches OpenGL/Vulkan buffers, particle containers, or the render pipeline
- * directly. That makes it inherently compatible with GPU-level mods. The one
- * real overlap is the vanilla particle setting, so this class lets the particle
- * lever step aside when a dedicated particle mod is present.
+ * <p>Intelium stays narrow: it tunes Sodium's chunk workers and defer mode, a
+ * handful of vanilla {@code GameOptions}, and asks vanilla's own "is this worth
+ * drawing?" questions to answer differently. It never touches OpenGL/Vulkan
+ * buffers or particle containers, which is what makes it inherently compatible
+ * with GPU-level mods. The real overlaps are particles and the frame rate, so
+ * this class lets those levers step aside when a mod that owns them is present.
  *
  * <ul>
  *   <li><b>GPUTape / GPUBooster</b> - low-level OpenGL state management (DSA,
@@ -21,8 +21,9 @@ import net.fabricmc.loader.api.FabricLoader;
  *   <li><b>AsyncParticles</b> - moves particle tick/rendering onto worker threads
  *       and warns about fragile interactions with other particle-manipulation
  *       mods. Intelium therefore does <em>not</em> force the vanilla particle
- *       setting when AsyncParticles is installed; it lets AsyncParticles own
- *       particle performance.</li>
+ *       setting when AsyncParticles is installed, and its own particle burst
+ *       budget stands down too; it lets AsyncParticles own particle
+ *       performance outright.</li>
  *   <li><b>Dynamic FPS / FPS Reducer</b> - dedicated background frame limiters
  *       that manage the frame rate around window focus themselves. Intelium's
  *       background FPS limit steps aside when one is installed, so the two

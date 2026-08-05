@@ -189,11 +189,12 @@ jobs:
             - **Ice Lake.** Its tiered branding (UHD Graphics G1, Iris Plus Graphics G4/G7) and Jasper/Elkhart Lake were falling through to the bare "HD Graphics" rule and being rejected as pre-Skylake. They are now correctly classified as Gen 11. A bare "UHD Graphics" string also falls back to the conservative Gen 9.5 profile, since the UHD brand never existed on pre-Skylake silicon.
             - **VirGL virtual GPUs** (ChromeOS Crostini, Linux VMs). Intelium now reads the host renderer embedded in the driver string and classifies that, refuses embedded NVIDIA/AMD hosts, and — when the host GPU is hidden entirely — says so with a dedicated message instead of silently doing nothing.
 
-            ### Fixed — three defects in the new engine, before you ever met them
+            ### Fixed — four defects in the new engine, before you ever met them
 
             - The block-entity budget could **fail to notice a frame boundary above ~500 FPS**, never reset its count, and from then on refuse every block entity — chests and signs simply gone. The boundary test is now far tighter, with a second absolute cap so the count can never get stuck.
             - The FPS-pressure signal **counted deliberately throttled frames**. Alt-tab with a background FPS limit, or open a menu with the menu cap on, and the pressure pegged at maximum — so coming back landed you in the most aggressive culling your settings allowed for a second or two. Those samples are now skipped, exactly as the render-distance controller already skips them.
             - Adaptive tightening could hand back a **larger** budget than it was given where a floor sat above the base. Tightening can no longer loosen.
+            - The particle limiter **did not step aside for AsyncParticles**, though every other particle lever in Intelium does. AsyncParticles owns particle performance from its own worker threads and warns about mods manipulating particles underneath it, so the burst budget now stands down entirely while it is installed.
 
             ---
 
@@ -261,11 +262,12 @@ jobs:
             - **Ice Lake.** Kademeli isimlendirmesi (UHD Graphics G1, Iris Plus Graphics G4/G7) ve Jasper/Elkhart Lake, sade "HD Graphics" kuralına düşüp Skylake öncesi sanılarak reddediliyordu. Artık doğru şekilde Gen 11 olarak sınıflandırılıyorlar. Sade "UHD Graphics" ifadesi de temkinli Gen 9.5 profiline düşüyor; çünkü UHD markası Skylake öncesi hiçbir yongada bulunmadı.
             - **VirGL sanal GPU'lar** (ChromeOS Crostini, Linux sanal makineleri). Intelium artık sürücü metnine gömülü host GPU'yu okuyup onu sınıflandırıyor, gömülü NVIDIA/AMD hostları reddediyor ve host GPU tamamen gizlenmişse sessizce hiçbir şey yapmak yerine bunu ayrı bir mesajla söylüyor.
 
-            ### Düzeltildi — yeni motordaki üç kusur, sen karşılaşmadan önce
+            ### Düzeltildi — yeni motordaki dört kusur, sen karşılaşmadan önce
 
             - Blok varlığı bütçesi, **yaklaşık 500 FPS üzerinde kare sınırını fark edemeyip** sayacını hiç sıfırlamayabiliyor ve o andan sonra her blok varlığını reddedebiliyordu — sandıklar ve tabelalar öylece yok olurdu. Sınır testi artık çok daha sıkı ve sayacın asla takılı kalamayacağı ikinci bir mutlak üst sınır var.
             - FPS baskı sinyali **bilerek kısılmış kareleri sayıyordu.** Arka plan FPS sınırıyla alt-tab yap ya da menü sınırı açıkken menü aç; baskı tavana yapışıyordu — geri döndüğünde bir iki saniye boyunca ayarlarının izin verdiği en agresif elemeyle karşılaşıyordun. Bu örnekler artık atlanıyor; görüş mesafesi denetleyicisinin zaten yaptığı gibi.
             - Uyarlanabilir sıkılaştırma, taban bütçenin üzerinde bir alt sınır olduğunda **daha büyük** bir bütçe döndürebiliyordu. Sıkılaştırma artık gevşetemez.
+            - Parçacık sınırlayıcı **AsyncParticles'a yol vermiyordu**; oysa Intelium'daki diğer tüm parçacık kolları veriyor. AsyncParticles parçacık performansını kendi iş parçacıklarından yönetir ve altından parçacıklara karışan modlar konusunda uyarır; artık o kuruluyken patlama bütçesi tamamen devre dışı kalıyor.
 
             ---
 
