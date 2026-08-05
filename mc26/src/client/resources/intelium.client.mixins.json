@@ -1,0 +1,16 @@
+{
+    "required": true,
+    "minVersion": "0.8.5",
+    "package": "com.intelium.mixin.client",
+    "compatibilityLevel": "JAVA_25",
+    "plugin": "com.intelium.mixin.client.InteliumClientMixinPlugin",
+    "client": [
+        "MixinBlockEntityRenderer",
+        "MixinEntityRenderer",
+        "MixinParticleEngine"
+    ],
+    "injectors": {
+        "defaultRequire": 0
+    },
+    "mixins": []
+}

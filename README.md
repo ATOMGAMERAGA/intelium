@@ -30,6 +30,7 @@ in `src/main/resources/assets/intelium/icon.png`.
 
 | Area | What Intelium does |
 |---|---|
+| Render Budget Engine | Three optimizations of Intelium's own, inside the render path rather than on top of a vanilla setting. **Smart Entity Culling** skips entities that land on fewer pixels than a threshold — measured from the entity's real size against your resolution and FOV, so a dropped item stops drawing at ~16 blocks while a zombie keeps drawing past 100. **Block Entity Budget** caps how many chests, signs and banners are drawn per frame; they are the one thing Sodium cannot batch into the chunk mesh, which is why a storage room tanks the frame rate. **Particle Burst Limiter** caps particle spawns per tick, cutting the tail of a TNT chain without removing the effect. All three can tighten under FPS pressure and relax on recovery. |
 | Chunk build threading | Overrides Sodium's chunk-build worker count with a generation- and profile-aware value. It scales with your CPU and reserves headroom for the render thread, so chunks keep up while you move (no hitch when new chunks enter view) without starving the frame. Honors a manual override. |
 | Fast chunk loading | Overrides Sodium's chunk **defer mode** — which ships at the slowest setting (`Always`) — so freshly meshed chunks become visible much sooner, and boosts build throughput. **Fast** = one-frame delay (recommended), **Turbo** = zero-frame (fastest). Self-disables cleanly if a Sodium build moves the setting. |
 | Live render tweaks | Opt-in caps on vanilla settings that cost real per-frame GPU/CPU time on weak iGPUs: entity render distance, particles, entity shadows, biome blending, clouds, graphics mode, smooth lighting, VSync and render distance. Each captures your original value and restores it when turned off — the captured originals are persisted, so the restore works even across a game restart. |
@@ -59,8 +60,8 @@ contains both; pick the one matching your Minecraft version.
 
 | Jar | Minecraft | Java | Renderer | Sodium |
 |---|---|---|---|---|
-| `Intelium-v1.2.5-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
-| `Intelium-v1.2.5-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
+| `Intelium-v1.2.6-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
+| `Intelium-v1.2.6-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
 
 - Fabric Loader **0.18.3+**
 - Fabric API
@@ -132,6 +133,16 @@ Settings are split across two pages: **General** (core + render tweaks) and
 | Force VSync Off | `false` | Uncaps FPS from the display refresh rate while Intelium is active. |
 | Max Render Distance | `No Cap` | Caps render distance (in chunks), downward only. Fewer chunk sections to build, upload and draw every frame. |
 | Max Simulation Distance | `No Cap` | Caps simulation distance, downward only. Fewer ticked chunks = real CPU savings in singleplayer; on power-shared iGPUs a cooler CPU means faster frames. |
+
+**General → Render Budget Engine** (Intelium's own culling systems; each is `Off` / `Light` / `Balanced` / `Aggressive`)
+
+| Option | Default | Notes |
+|---|---|---|
+| Render Budget Engine | `true` | Master switch for the three budgets below. Turning it off stands them all down instantly. |
+| Smart Entity Culling | `Balanced` | Skips drawing entities too small on screen to make out. The threshold is a real on-screen height in pixels (Light 6px, Balanced 12px, Aggressive 24px), so it scales with resolution and FOV and with each entity's own size. Nothing within 12 blocks is ever culled; players and named entities are always drawn. |
+| Block Entity Budget | `Balanced` | Caps block-entity draws per frame (Light 512, Balanced 256, Aggressive 128). An ordinary scene has a few dozen and never reaches it. |
+| Particle Burst Limiter | `Balanced` | Caps new particle spawns per tick (Light 1024, Balanced 512, Aggressive 256). Ordinary play spawns a handful per tick; explosions spawn thousands. |
+| Adaptive Budgets | `true` | Lets the three tighten further when FPS falls short of the Adaptive FPS Target, and relax the moment it recovers. At target it changes nothing. |
 
 **General → Adaptive Performance** (off by default)
 

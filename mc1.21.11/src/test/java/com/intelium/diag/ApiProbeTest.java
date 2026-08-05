@@ -33,19 +33,15 @@ class ApiProbeTest {
 
     /** Simple-name fragments worth listing. */
     private static final String[] CLASS_FILTERS = {
-            "EntityRender", "RenderDispatcher", "WorldRenderer", "LevelRenderer",
-            "ParticleManager", "ParticleEngine", "RenderCommandQueue",
+            "ParticleManager", "ParticleEngine",
     };
 
     /** Simple names whose full method list is worth printing. */
     private static final List<String> DUMP_ALL = List.of(
-            "EntityRenderer", "BlockEntityRenderer", "EntityRenderDispatcher",
-            "BlockEntityRenderDispatcher", "ParticleManager", "ParticleEngine");
+            "ParticleManager", "ParticleEngine");
 
     /** Simple names where only entity-ish methods are worth printing. */
-    private static final List<String> DUMP_ENTITY_ONLY = List.of(
-            "WorldRenderer", "LevelRenderer", "OrderedRenderCommandQueue",
-            "OrderedRenderCommandQueueImpl");
+    private static final List<String> DUMP_ENTITY_ONLY = List.of();
 
     @Test
     @DisplayName("Dump mixin target signatures")

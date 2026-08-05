@@ -28,6 +28,10 @@
         {
             "config": "intelium.mixins.json",
             "environment": "client"
+        },
+        {
+            "config": "intelium.client.mixins.json",
+            "environment": "client"
         }
     ],
     "depends": {
