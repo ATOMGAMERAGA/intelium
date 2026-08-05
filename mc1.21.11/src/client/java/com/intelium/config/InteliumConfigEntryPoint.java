@@ -3,11 +3,13 @@ package com.intelium.config;
 import com.intelium.Intelium;
 import com.intelium.client.ChunkLoadingBooster;
 import com.intelium.client.InteliumGame;
+import com.intelium.client.RenderBudgetDriver;
 import com.intelium.client.RenderTweaks;
 import com.intelium.client.hud.OverlayEditScreen;
 import com.intelium.gui.SupportedGpusScreen;
 import com.intelium.optimization.ChunkLoadingMode;
 import com.intelium.optimization.CloudsMode;
+import com.intelium.optimization.CullingStrength;
 import com.intelium.optimization.OptimizationProfile;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.StorageEventHandler;
@@ -295,6 +297,60 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                                             () -> Math.max(0, Math.min(60, cfg.menuFpsLimit)))
                                 .setApplyHook(state -> RenderTweaks.apply())
                                 .setDefaultValue(0)
+                        )
+                )
+                .addOptionGroup(builder.createOptionGroup()
+                        .setName(Text.translatable("intelium.options.group.budget"))
+                        .addOption(builder.createBooleanOption(id("render_budget"))
+                                .setName(Text.translatable("intelium.options.render_budget"))
+                                .setTooltip(Text.translatable("intelium.options.render_budget.tooltip"))
+                                .setStorageHandler(saveHook)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE)
+                                .setBinding(v -> cfg.renderBudget = v, () -> cfg.renderBudget)
+                                .setApplyHook(state -> RenderBudgetDriver.apply())
+                                .setDefaultValue(true)
+                        )
+                        .addOption(builder.createEnumOption(id("entity_culling"), CullingStrength.class)
+                                .setName(Text.translatable("intelium.options.entity_culling"))
+                                .setTooltip(Text.translatable("intelium.options.entity_culling.tooltip"))
+                                .setElementNameProvider(s -> Text.translatable(s.displayKey()))
+                                .setStorageHandler(saveHook)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget)
+                                .setBinding(v -> cfg.entityCulling = v.key,
+                                            () -> CullingStrength.fromKey(cfg.entityCulling))
+                                .setApplyHook(state -> RenderBudgetDriver.apply())
+                                .setDefaultValue(CullingStrength.BALANCED)
+                        )
+                        .addOption(builder.createEnumOption(id("block_entity_culling"), CullingStrength.class)
+                                .setName(Text.translatable("intelium.options.block_entity_culling"))
+                                .setTooltip(Text.translatable("intelium.options.block_entity_culling.tooltip"))
+                                .setElementNameProvider(s -> Text.translatable(s.displayKey()))
+                                .setStorageHandler(saveHook)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget)
+                                .setBinding(v -> cfg.blockEntityCulling = v.key,
+                                            () -> CullingStrength.fromKey(cfg.blockEntityCulling))
+                                .setApplyHook(state -> RenderBudgetDriver.apply())
+                                .setDefaultValue(CullingStrength.BALANCED)
+                        )
+                        .addOption(builder.createEnumOption(id("particle_budget"), CullingStrength.class)
+                                .setName(Text.translatable("intelium.options.particle_budget"))
+                                .setTooltip(Text.translatable("intelium.options.particle_budget.tooltip"))
+                                .setElementNameProvider(s -> Text.translatable(s.displayKey()))
+                                .setStorageHandler(saveHook)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget)
+                                .setBinding(v -> cfg.particleBudget = v.key,
+                                            () -> CullingStrength.fromKey(cfg.particleBudget))
+                                .setApplyHook(state -> RenderBudgetDriver.apply())
+                                .setDefaultValue(CullingStrength.BALANCED)
+                        )
+                        .addOption(builder.createBooleanOption(id("adaptive_budgets"))
+                                .setName(Text.translatable("intelium.options.adaptive_budgets"))
+                                .setTooltip(Text.translatable("intelium.options.adaptive_budgets.tooltip"))
+                                .setStorageHandler(saveHook)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget)
+                                .setBinding(v -> cfg.adaptiveCulling = v, () -> cfg.adaptiveCulling)
+                                .setApplyHook(state -> RenderBudgetDriver.apply())
+                                .setDefaultValue(true)
                         )
                 )
                 .addOptionGroup(builder.createOptionGroup()

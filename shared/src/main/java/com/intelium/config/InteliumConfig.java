@@ -154,6 +154,52 @@ public class InteliumConfig {
      */
     public int menuFpsLimit = 0;
 
+    // ---- Render Budget Engine ---------------------------------------------
+    // Intelium's own culling systems. Unlike everything above, these do not
+    // flip a vanilla setting - they sit in the render path and decide, per
+    // entity / per block entity / per particle, whether the work is worth
+    // doing at all. See com.intelium.optimization.RenderBudget.
+
+    /** Master switch for the three budgets below. */
+    public boolean renderBudget = true;
+
+    /**
+     * Screen-space entity culling: {@code "off"}, {@code "light"},
+     * {@code "balanced"} or {@code "aggressive"}. Skips drawing entities whose
+     * on-screen size falls below a threshold in pixels - so distant dropped
+     * items, XP orbs and arrows stop being drawn long before anything you could
+     * actually make out does. Unlike vanilla's Entity Distance this scales with
+     * the entity's real size and with your resolution and FOV. Nothing within
+     * 12 blocks is ever culled, and players and named entities are exempt.
+     */
+    public String entityCulling = "balanced";
+
+    /**
+     * Per-frame block-entity budget: {@code "off"} .. {@code "aggressive"}.
+     * Chests, signs, banners, item frames and beacons are the one part of the
+     * world Sodium cannot batch into the chunk mesh - each is drawn
+     * individually, every frame. A normal scene never reaches the ceiling; a
+     * storage room does, and that is where it buys back the frames.
+     */
+    public String blockEntityCulling = "balanced";
+
+    /**
+     * Per-tick particle spawn budget: {@code "off"} .. {@code "aggressive"}.
+     * Ordinary play spawns a handful of particles per tick and never notices
+     * this; a TNT chain or a splash-potion volley spawns thousands in one tick,
+     * each costing CPU to tick and GPU to draw for its whole life. Capping the
+     * burst keeps the effect and drops the freeze.
+     */
+    public String particleBudget = "balanced";
+
+    /**
+     * Whether the three budgets tighten further when the frame rate falls short
+     * of {@link #adaptiveFpsTarget}, and relax again once it recovers. On by
+     * default: it only ever trades detail for frames when there are no frames
+     * to spare.
+     */
+    public boolean adaptiveCulling = true;
+
     // ---- FPS test overlay ------------------------------------------------
 
     /** Whether the movable on-screen FPS test overlay is shown. */
@@ -214,6 +260,9 @@ public class InteliumConfig {
         if (cfg.profile == null) cfg.profile = defaults.profile;
         if (cfg.chunkLoadingMode == null) cfg.chunkLoadingMode = defaults.chunkLoadingMode;
         if (cfg.cloudsMode == null) cfg.cloudsMode = defaults.cloudsMode;
+        if (cfg.entityCulling == null) cfg.entityCulling = defaults.entityCulling;
+        if (cfg.blockEntityCulling == null) cfg.blockEntityCulling = defaults.blockEntityCulling;
+        if (cfg.particleBudget == null) cfg.particleBudget = defaults.particleBudget;
         cfg.chunkBuildWorkers = clamp(cfg.chunkBuildWorkers, 0, 16);
         cfg.maxEntityDistancePercent = clamp(cfg.maxEntityDistancePercent, 50, 100);
         cfg.maxRenderDistance = cfg.maxRenderDistance <= 0

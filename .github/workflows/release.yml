@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INTELIUM_VERSION: "1.2.5"
+  INTELIUM_VERSION: "1.2.6"
 
 jobs:
   build:
@@ -36,11 +36,11 @@ jobs:
           - target: mc1.21.11
             java: '21'
             label: '1.21.11'
-            jarname: 'Intelium-v1.2.5-1.21.11.jar'
+            jarname: 'Intelium-v1.2.6-1.21.11.jar'
           - target: mc26
             java: '25'
             label: '26.x'
-            jarname: 'Intelium-v1.2.5-26.x.jar'
+            jarname: 'Intelium-v1.2.6-26.x.jar'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,39 +131,51 @@ jobs:
             ````markdown
             ## English
 
-            **"Stop re-loading my chunks" release** — this update fixes the long-standing annoyance where the adaptive (smart) chunk features made the mod visibly re-load all chunks every so often, and adds a new GPU saver. Supports Minecraft **1.21.11** and the **26.x** line (26.1 → 26.2, including the Vulkan renderer).
+            **The Render Budget Engine release.** Until now Intelium made the game faster by flipping vanilla settings for you, well. This update adds three optimizations of our own that live *inside* the render path, and each one removes work the game was doing for nothing. Not one of them is a switch you could have flipped in the vanilla menu. Supports Minecraft **1.21.11** and the **26.x** line (26.1 → 26.2, including the Vulkan renderer).
 
-            ### Fixed — Adaptive Render Distance no longer re-loads chunks over and over
-            Two separate causes, both fixed:
+            ### New — Smart Entity Culling
+            Vanilla's "Entity Distance" is a single multiplier applied to everything alike: a dropped item and an ender dragon disappear at the same range. But what costs you frames is draw calls for things you cannot see, and whether you can see something depends on how big it lands **on your screen** — its real size over its distance, scaled by your field of view and your resolution.
 
-            - **Alt-tab chunk reloads.** Unfocusing the window used to drop the adaptive reduction entirely — which forced a full chunk re-load, and *another one* on refocus when the controller reduced again. The reduction is now **held** while the window is unfocused (and while a menu FPS cap or the A/B benchmark is running); only the measurement pauses.
-            - **Up/down ping-pong.** Stepping the render distance back up triggers a chunk-graph rebuild whose build burst *itself* reads as low FPS — so the controller immediately stepped back down, then up again 10 seconds later, forever. Every swing was a visible "the mod is loading all chunks again" moment. The controller now ignores a short **settle window** after each upward step (its own rebuild is never mistaken for lag), and a recovery that fails puts the next attempt on an **exponential backoff** (2× → 8× longer wait). A recovery that sticks relaxes the backoff again.
+            So Intelium culls by apparent size. For every entity it works out how many pixels tall it actually covers, and skips the ones below a threshold (Light 6 px, Balanced 12 px, Aggressive 24 px). At 1080p and 70° FOV on Balanced that means a dropped item or an XP orb stops drawing past ~16 blocks — where it was three pixels of noise — while a zombie keeps drawing past 100. Small-and-far is exactly the population that is numerous and worthless to draw, and it is the only population this touches. Nothing within 12 blocks is ever culled, and players and name-tagged entities are always drawn.
 
-            The result: the smart chunk-loading features now change the render distance only when it genuinely helps, and the world stops flickering through rebuild cycles — which is itself an FPS win, since every avoided rebuild is CPU/GPU time your frames keep.
+            ### New — Block Entity Budget
+            Chests, signs, banners, beds, skulls and shulker boxes are the one part of the world Sodium cannot bake into the chunk mesh: each is walked and drawn on its own, every single frame. An open field has none of them. A storage room has six hundred — which is why the frame rate falls off a cliff in exactly the base you spent a month building. Intelium caps how many are drawn per frame (Light 512, Balanced 256, Aggressive 128) and drops the ones far enough away to be a smudge. An ordinary scene has a few dozen and never comes near the ceiling.
 
-            ### New — Disable Menu Background Blur (GPU Savers group)
-            The gaussian blur behind menus re-filters the whole frame on every menu frame — real GPU cost on an iGPU whenever the pause screen, inventory or settings are open. The new **Disable Menu Background Blur** toggle (off by default) forces the blur to 0 while Intelium is active, and restores your own blur setting the moment you turn it off. Pairs perfectly with the Menu FPS Limit.
+            ### New — Particle Burst Limiter
+            Ordinary play spawns a handful of particles a tick and never notices this. A TNT chain or a splash-potion volley spawns thousands in a single tick, and every one of them then costs CPU to tick and GPU to draw for its whole lifetime — which is why the frame rate stays down for seconds *after* the bang, not just during it. Intelium caps new spawns per tick (Light 1024, Balanced 512, Aggressive 256). The explosion still looks like an explosion; the freeze that used to follow it stops happening.
 
-            All existing levers (chunk-worker tuning, fast chunk loading, the GPU Savers group, live render tweaks, background & menu FPS limits) are unchanged and still capture & restore your original settings — even across a restart.
+            ### New — Adaptive Budgets
+            All three tighten further when your frame rate falls short of the Adaptive FPS Target, and relax again the moment it recovers — at worst doubling the culling threshold and halving the budgets. While you are holding your target they change nothing at all.
+
+            ### Defaults, and where to find it
+            The engine ships **on**, at **Balanced**, because Balanced is tuned to remove only what you were not going to see anyway. Every system has its own Off / Light / Balanced / Aggressive setting under Sodium's video settings → Intelium → **Render Budget Engine**, and the master switch stands all three down instantly.
+
+            Nothing else changed: chunk-worker tuning, fast chunk loading, the GPU Savers group, the live render tweaks, adaptive render distance and the background & menu FPS limits all behave exactly as they did, and still capture and restore your own settings across a restart. As always, if a future Minecraft moves one of the methods a hook attaches to, that one budget disables itself with a line in the log instead of crashing the game.
 
             Two jars: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) or `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Full Türkçe and English localisation. Verified compatible with GPUTape, AsyncParticles, Dynamic FPS and FPS Reducer.
 
             ## Türkçe (Turkish)
 
-            **"Chunk'larımı yeniden yükleyip durma" sürümü** — bu güncelleme, akıllı (uyarlanabilir) chunk özelliklerinin modun ikide bir tüm chunk'ları gözle görülür şekilde yeniden yüklemesine yol açan sorunu çözüyor ve yeni bir GPU tasarrufu ekliyor. Minecraft **1.21.11** ve **26.x** serisi (26.1 → 26.2, Vulkan dahil) desteklenir.
+            **Render Bütçe Motoru sürümü.** Intelium şimdiye kadar oyunu, vanilya ayarlarını senin yerine iyi biçimde değiştirerek hızlandırıyordu. Bu güncelleme, doğrudan render hattının *içinde* çalışan, kendi geliştirdiğimiz üç optimizasyon ekliyor; her biri oyunun boşuna yaptığı işi ortadan kaldırıyor. Hiçbiri vanilya menüsünden kendin açabileceğin bir seçenek değil. Minecraft **1.21.11** ve **26.x** serisi (26.1 → 26.2, Vulkan dahil) desteklenir.
 
-            ### Düzeltildi — Uyarlanabilir Görüş Mesafesi artık chunk'ları tekrar tekrar yüklemiyor
-            İki ayrı neden vardı, ikisi de düzeltildi:
+            ### Yeni — Akıllı Varlık Eleme
+            Vanilya'nın "Varlık Mesafesi" ayarı her şeye aynı çarpanı uygular: yere düşmüş bir eşya ile ender ejderhası aynı mesafede kaybolur. Oysa sana kare kaybettiren şey, göremediğin şeyler için yapılan çizim çağrılarıdır ve bir şeyi görüp göremediğini, onun **ekranında** ne kadar yer kapladığı belirler — gerçek boyutunun mesafesine oranı, görüş açın ve çözünürlüğünle ölçeklenmiş hâli.
 
-            - **Alt-tab chunk yeniden yüklemeleri.** Pencere odağı kaybolduğunda uyarlanabilir azaltım tamamen sıfırlanıyordu — bu tam bir chunk yeniden yüklemesine, odak geri geldiğinde denetleyici tekrar düşürdüğü için *bir tane daha* yüklemeye zorluyordu. Artık pencere odaksızken (ve menü FPS sınırı ya da A/B testi çalışırken) azaltım **korunuyor**; yalnızca ölçüm duraklıyor.
-            - **Aşağı/yukarı ping-pong.** Görüş mesafesini yukarı adımlamak chunk grafiğinin yeniden inşasını tetikler ve bu inşa patlaması *kendisi* düşük FPS gibi okunur — denetleyici hemen tekrar aşağı iniyor, 10 saniye sonra tekrar yukarı çıkıyordu; sonsuza dek. Her salınım gözle görülür bir "mod yine tüm chunk'ları yüklüyor" anıydı. Denetleyici artık her yukarı adımdan sonra kısa bir **oturma penceresini** yok sayıyor (kendi tetiklediği inşa asla gecikme sanılmıyor) ve tutmayan bir toparlanma, bir sonraki denemeyi **üstel geri çekilmeye** (2× → 8× daha uzun bekleme) alıyor. Tutan bir toparlanma geri çekilmeyi tekrar gevşetiyor.
+            Bu yüzden Intelium görünen boyuta göre eler. Her varlık için ekranda gerçekte kaç piksel yükseldiğini hesaplar ve eşiğin altında kalanları atlar (Hafif 6 px, Dengeli 12 px, Agresif 24 px). 1080p ve 70° görüş açısında Dengeli seviyede bu şu demek: yere düşmüş bir eşya ya da tecrübe küresi ~16 bloktan sonra — zaten üç piksellik bir lekeyken — çizilmeyi bırakır, bir zombi ise 100 bloğun ötesinde bile çizilmeye devam eder. Küçük ve uzak olanlar, tam olarak hem çok sayıda olan hem de çizilmeye değmeyen gruptur; bu özelliğin dokunduğu tek grup da odur. 12 blok içindeki hiçbir şey asla elenmez; oyuncular ve isim etiketli varlıklar her zaman çizilir.
 
-            Sonuç: akıllı chunk yükleme özellikleri görüş mesafesini artık yalnızca gerçekten işe yaradığında değiştiriyor ve dünya yeniden inşa döngülerinde titremeyi bırakıyor — bu başlı başına bir FPS kazancı, çünkü önlenen her yeniden inşa karelerine kalan CPU/GPU zamanıdır.
+            ### Yeni — Blok Varlığı Bütçesi
+            Sandıklar, tabelalar, sancaklar, yataklar, kafalar ve shulker kutuları, dünyanın Sodium'un chunk örgüsüne katamadığı tek parçasıdır: her biri her karede tek tek gezilip çizilir. Açık arazide hiç yoktur. Bir depo odasında altı yüz tane vardır — bir ay uğraşıp yaptığın üssünde FPS'in tam da bu yüzden yerle bir olur. Intelium kare başına kaçının çizileceğini sınırlar (Hafif 512, Dengeli 256, Agresif 128) ve leke olacak kadar uzaktakileri eler. Sıradan bir sahnede birkaç düzine vardır ve tavana hiç yaklaşmaz.
 
-            ### Yeni — Menü Arka Plan Bulanıklığını Kapat (GPU Tasarrufları grubu)
-            Menülerin arkasındaki gaussian bulanıklık her menü karesinde tüm kareyi yeniden filtreler — duraklatma ekranı, envanter veya ayarlar açıkken iGPU'da gerçek GPU maliyeti. Yeni **Menü Arka Plan Bulanıklığını Kapat** seçeneği (varsayılan kapalı) Intelium etkinken bulanıklığı 0'a zorlar ve kapattığın an kendi bulanıklık ayarını geri yükler. Menü FPS Sınırı ile mükemmel uyum sağlar.
+            ### Yeni — Parçacık Patlaması Sınırlayıcı
+            Sıradan oyunda tick başına bir avuç parçacık doğar ve bunu hiç fark etmezsin. Bir TNT zinciri ya da iksir yağmuru tek bir tick'te binlercesini doğurur ve her biri ömrü boyunca tick için CPU, çizim için GPU harcar — patlamadan *sonra* da FPS'in saniyelerce düşük kalmasının sebebi budur, patlama anında değil. Intelium tick başına yeni doğumları sınırlar (Hafif 1024, Dengeli 512, Agresif 256). Patlama yine patlama gibi görünür; ardından gelen donma ise artık yaşanmaz.
 
-            Var olan tüm kollar (chunk-worker ayarı, hızlı chunk yükleme, GPU Tasarrufları grubu, canlı render ayarları, arka plan ve menü FPS sınırları) değişmedi ve orijinal ayarlarını yakalayıp geri yüklemeye devam ediyor — yeniden başlatmalarda bile.
+            ### Yeni — Uyarlanabilir Bütçeler
+            Kare hızın Uyarlanabilir FPS Hedefi'nin altında kaldığında üçü de daha da sıkılaşır, hedef geri tutturulduğu an tekrar gevşer — en kötü durumda eleme eşiği iki katına, bütçeler yarıya iner. Hedefini tutturduğun sürece hiçbir şeyi değiştirmezler.
+
+            ### Varsayılanlar ve nerede bulunur
+            Motor **açık** ve **Dengeli** olarak gelir; çünkü Dengeli seviye, yalnızca zaten göremeyeceğin şeyleri kaldıracak biçimde ayarlandı. Her sistemin kendi Kapalı / Hafif / Dengeli / Agresif ayarı Sodium'un video ayarları → Intelium → **Render Bütçe Motoru** altında; ana anahtar ise üçünü birden anında durdurur.
+
+            Başka hiçbir şey değişmedi: chunk-worker ayarı, hızlı chunk yükleme, GPU Tasarrufları grubu, canlı render ayarları, uyarlanabilir görüş mesafesi ve arka plan & menü FPS sınırları tam olarak eskisi gibi çalışıyor ve kendi ayarlarını yeniden başlatmalarda bile yakalayıp geri yüklemeye devam ediyor. Her zamanki gibi: ileride bir Minecraft sürümü kancaların bağlandığı bir metodu taşırsa, o bütçe oyunu çökertmek yerine günlüğe bir satır yazıp kendini kapatır.
 
             İki jar: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) ya da `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Tam Türkçe ve İngilizce yerelleştirme. GPUTape, AsyncParticles, Dynamic FPS ve FPS Reducer ile uyumluluğu doğrulandı.
             ````
