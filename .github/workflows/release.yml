@@ -131,7 +131,7 @@ jobs:
             ````markdown
             ## English
 
-            **The Render Budget Engine release.** Until now Intelium made the game faster by flipping vanilla settings for you, well. This update adds three optimizations of our own that live *inside* the render path, and each one removes work the game was doing for nothing. Not one of them is a switch you could have flipped in the vanilla menu. Supports Minecraft **1.21.11** and the **26.x** line (26.1 → 26.2, including the Vulkan renderer).
+            **The Render Budget Engine release.** Until now, every Intelium lever was a vanilla setting flipped on your behalf — useful, but nothing you could not have flipped yourself. This update adds three optimizations of our own that live *inside* the render path, and each one removes work the game was doing for nothing. Supports Minecraft **1.21.11** and the **26.x** line (26.1 → 26.2, including the Vulkan renderer).
 
             ### New — Smart Entity Culling
             Vanilla's "Entity Distance" is a single multiplier applied to everything alike: a dropped item and an ender dragon disappear at the same range. But what costs you frames is draw calls for things you cannot see, and whether you can see something depends on how big it lands **on your screen** — its real size over its distance, scaled by your field of view and your resolution.
@@ -156,7 +156,7 @@ jobs:
 
             ## Türkçe (Turkish)
 
-            **Render Bütçe Motoru sürümü.** Intelium şimdiye kadar oyunu, vanilya ayarlarını senin yerine iyi biçimde değiştirerek hızlandırıyordu. Bu güncelleme, doğrudan render hattının *içinde* çalışan, kendi geliştirdiğimiz üç optimizasyon ekliyor; her biri oyunun boşuna yaptığı işi ortadan kaldırıyor. Hiçbiri vanilya menüsünden kendin açabileceğin bir seçenek değil. Minecraft **1.21.11** ve **26.x** serisi (26.1 → 26.2, Vulkan dahil) desteklenir.
+            **Render Bütçe Motoru sürümü.** Şimdiye kadar Intelium'un yaptığı her şey, senin yerine değiştirilmiş bir vanilya ayarıydı — işe yarıyordu, ama kendin de yapabileceğin şeylerdi. Bu güncelleme, doğrudan render hattının *içinde* çalışan, kendi geliştirdiğimiz üç optimizasyon ekliyor; her biri oyunun boşuna yaptığı işi ortadan kaldırıyor. Minecraft **1.21.11** ve **26.x** serisi (26.1 → 26.2, Vulkan dahil) desteklenir.
 
             ### Yeni — Akıllı Varlık Eleme
             Vanilya'nın "Varlık Mesafesi" ayarı her şeye aynı çarpanı uygular: yere düşmüş bir eşya ile ender ejderhası aynı mesafede kaybolur. Oysa sana kare kaybettiren şey, göremediğin şeyler için yapılan çizim çağrılarıdır ve bir şeyi görüp göremediğini, onun **ekranında** ne kadar yer kapladığı belirler — gerçek boyutunun mesafesine oranı, görüş açın ve çözünürlüğünle ölçeklenmiş hâli.
