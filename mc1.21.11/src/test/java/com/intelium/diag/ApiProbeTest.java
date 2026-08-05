@@ -7,8 +7,6 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.fail;
-
 /**
  * TEMPORARY diagnostic. Dumps the exact method names and JVM descriptors of the
  * classes Intelium's mixins target, so the {@code method = "..."} strings can be
@@ -56,7 +54,9 @@ class ApiProbeTest {
             lines.stream().sorted().forEach(l -> sb.append(l).append('\n'));
         }
         sb.append("\n===== END PROBE =====\n");
-        fail(sb.toString());
+        // stderr, not an assertion: Gradle's testLogging surfaces standardError
+        // in the CI log, while assertion messages only land in the HTML report.
+        System.err.println(sb);
     }
 
     private static boolean matches(String name, String filter) {
