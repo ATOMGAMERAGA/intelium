@@ -35,6 +35,9 @@ public class InteliumClientInit implements ClientModInitializer {
             // Feed the adaptive render-distance controller first so the cap it
             // publishes is applied by RenderTweaks in the same tick.
             AdaptiveDistance.tick(client);
+            // Recompute the render budgets from the config, the camera and the
+            // current FPS pressure, so this tick's frames read fresh numbers.
+            RenderBudgetDriver.tick(client);
             // Keep the live render tweaks reconciled with the config.
             RenderTweaks.apply();
             // Keep Sodium's defer mode in sync with the fast-chunk-loading mode.

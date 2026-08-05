@@ -66,16 +66,6 @@ jobs:
             -PinteliumVersion="${INTELIUM_VERSION}" \
             --no-daemon --stacktrace
 
-      # TEMPORARY: re-runs the API probe on its own so its dump lands at the end
-      # of the job log, where it can actually be read. Removed once the mixin
-      # descriptors are pinned.
-      - name: API probe (temporary)
-        run: |
-          ./${{ matrix.target }}/gradlew -p ${{ matrix.target }} test \
-            --tests 'com.intelium.diag.ApiProbeTest' --rerun \
-            --no-daemon
-          cat ${{ matrix.target }}/build/api-probe.txt
-
       - name: Collect the mod jar
         run: |
           mkdir -p dist
@@ -98,6 +88,16 @@ jobs:
           name: jar-${{ matrix.target }}
           path: dist/${{ matrix.jarname }}
           retention-days: 90
+
+      # TEMPORARY: re-runs the API probe on its own so its dump lands at the end
+      # of the job log, where it can actually be read. Removed once the mixin
+      # descriptors are pinned.
+      - name: API probe (temporary)
+        run: |
+          ./${{ matrix.target }}/gradlew -p ${{ matrix.target }} test \
+            --tests 'com.intelium.diag.ApiProbeTest' --rerun \
+            --no-daemon
+          cat ${{ matrix.target }}/build/api-probe.txt
 
   release:
     name: Publish release
