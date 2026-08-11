@@ -362,4 +362,53 @@ class IntelGpuRendererClassificationTest {
         assertEquals(IntelGpuGeneration.XE_HPG_ARC_ALCHEMIST,
                 classify("Intel(R) Arc(TM) A770 Graphics on Windows 11"));
     }
+
+    // ===== Word-boundary hygiene: "xe" must not match "Xeon" =====
+
+    @Test
+    @DisplayName("'Xeon' in the renderer is not the 'xe' keyword (no forced Gen 12)")
+    void xeonIsNotXe() {
+        // A CPU model embedded in the renderer string must not force-classify
+        // the iGPU as Gen 12.
+        assertEquals(IntelGpuGeneration.UNKNOWN, classify("Intel(R) Xeon(R) Graphics"));
+        assertEquals(IntelGpuGeneration.GEN9_SKYLAKE,
+                classify("Intel(R) HD Graphics P530 (Xeon E3-1505M v5)"));
+    }
+
+    @Test
+    @DisplayName("Real Iris Xe strings still map to GEN12_XE_LP")
+    void irisXeStillGen12() {
+        assertEquals(IntelGpuGeneration.GEN12_XE_LP, classify("Intel(R) Iris(R) Xe Graphics"));
+        assertEquals(IntelGpuGeneration.GEN12_XE_LP,
+                classify("Mesa Intel(R) Xe Graphics (TGL GT2)"));
+    }
+
+    @Test
+    @DisplayName("A bare Xe2 token maps to XE2_LUNAR_BATTLEMAGE")
+    void bareXe2Token() {
+        assertEquals(IntelGpuGeneration.XE2_LUNAR_BATTLEMAGE,
+                classify("Intel(R) Xe2 Graphics"));
+    }
+
+    // ===== Workstation (Xeon) iGPUs: P-prefixed models are the same silicon =====
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Intel(R) HD Graphics P530",
+            "Intel(R) Iris(R) Pro Graphics P580",
+    })
+    @DisplayName("Workstation P5xx parts map to GEN9_SKYLAKE, not too-old")
+    void workstationSkylake(String renderer) {
+        assertEquals(IntelGpuGeneration.GEN9_SKYLAKE, classify(renderer));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Intel(R) HD Graphics P630",
+            "Intel(R) UHD Graphics P630",
+    })
+    @DisplayName("Workstation P630 parts map to GEN9_5_KABY_COFFEE, not too-old")
+    void workstationKabyCoffee(String renderer) {
+        assertEquals(IntelGpuGeneration.GEN9_5_KABY_COFFEE, classify(renderer));
+    }
 }

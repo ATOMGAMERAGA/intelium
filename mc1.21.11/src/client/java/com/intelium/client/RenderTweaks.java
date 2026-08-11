@@ -226,7 +226,14 @@ public final class RenderTweaks {
             }
             return captured;
         } else if (cap.graphics != null) {
-            setIfChanged(opt, parseEnum(GraphicsMode.class, cap.graphics, opt.getValue()));
+            // The same CUSTOM respect on the way out: if the user hand-tuned
+            // individual options while the lever was on (preset now CUSTOM),
+            // restoring the captured preset would apply it as a group and wipe
+            // their mix - the exact stomp the on-path refuses. Just forget the
+            // capture and leave their choices alone.
+            if (opt.getValue() != GraphicsMode.CUSTOM) {
+                setIfChanged(opt, parseEnum(GraphicsMode.class, cap.graphics, opt.getValue()));
+            }
             cap.graphics = null;
             return true;
         }
@@ -345,10 +352,33 @@ public final class RenderTweaks {
         if (!on) return 0;
         int background = (cfg.backgroundFpsLimit > 0 && !mc.isWindowFocused())
                 ? cfg.backgroundFpsLimit : 0;
-        int menu = (cfg.menuFpsLimit > 0 && mc.currentScreen != null
+        int menu = (cfg.menuFpsLimit > 0 && menuScreenOpen(mc)
                 && !AbBenchmark.INSTANCE.isRunning())
                 ? cfg.menuFpsLimit : 0;
         return mergeCaps(background, menu);
+    }
+
+    /**
+     * Whether a menu that hides gameplay is open: a screen that would pause a
+     * singleplayer game. Chat, the death screen and other screens the player
+     * watches the live world through answer false - throttling those would
+     * drop the whole game to the menu cap mid-combat, world fully visible.
+     */
+    static boolean menuScreenOpen(MinecraftClient mc) {
+        return mc.currentScreen != null && mc.currentScreen.shouldPause();
+    }
+
+    /**
+     * Whether the frame rate is deliberately throttled right now - by
+     * Intelium's own background/menu caps, or by a dedicated frame limiter mod
+     * while the window is unfocused - so this tick's FPS sample says nothing
+     * about real render performance and must not feed any measurement.
+     */
+    static boolean fpsDeliberatelyThrottled(MinecraftClient mc) {
+        if (!mc.isWindowFocused() && ModCompat.frameLimiterPresent()) return true;
+        InteliumConfig cfg = InteliumConfigIO.get();
+        boolean master = Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE && cfg.tuneFrameSettings;
+        return fpsLimitFor(mc, cfg, master && !ModCompat.frameLimiterPresent()) > 0;
     }
 
     private static boolean applyFpsLimit(GameOptions o, InteliumConfig.CapturedOptions cap,

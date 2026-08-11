@@ -51,8 +51,10 @@ public final class AbBenchmark {
     private Runnable reload = () -> {};
 
     public AbBenchmark(long warmupMs, long measureMs) {
-        this.warmupMs = warmupMs;
-        this.measureMs = measureMs;
+        // Floor at 1 ms so a degenerate construction cannot divide by zero in
+        // progressPercent() or make a phase unable to end.
+        this.warmupMs = Math.max(1L, warmupMs);
+        this.measureMs = Math.max(1L, measureMs);
     }
 
     /**
@@ -78,6 +80,17 @@ public final class AbBenchmark {
 
     /** Advances the state machine. Call once per client tick with the live FPS. */
     public synchronized void tick(long now, int fps) {
+        tick(now, fps, true);
+    }
+
+    /**
+     * Advances the state machine. {@code measurable} is false while the frame
+     * rate is deliberately throttled (window unfocused with a background FPS
+     * cap, menu cap active): time still passes, but those samples are not
+     * averaged into either measurement window - a mid-run alt-tab must not
+     * poison the comparison.
+     */
+    public synchronized void tick(long now, int fps, boolean measurable) {
         this.lastNow = now;
         long elapsed = now - phaseStart;
         switch (phase) {
@@ -85,8 +98,10 @@ public final class AbBenchmark {
                 if (elapsed >= warmupMs) enter(Phase.MEASURE_ON, now);
             }
             case MEASURE_ON -> {
-                sumOn += fps;
-                nOn++;
+                if (measurable) {
+                    sumOn += fps;
+                    nOn++;
+                }
                 if (elapsed >= measureMs) {
                     onFps = nOn > 0 ? sumOn / nOn : 0;
                     setEnabled.accept(false);
@@ -98,8 +113,10 @@ public final class AbBenchmark {
                 if (elapsed >= warmupMs) enter(Phase.MEASURE_OFF, now);
             }
             case MEASURE_OFF -> {
-                sumOff += fps;
-                nOff++;
+                if (measurable) {
+                    sumOff += fps;
+                    nOff++;
+                }
                 if (elapsed >= measureMs) {
                     offFps = nOff > 0 ? sumOff / nOff : 0;
                     setEnabled.accept(restoreEnabled);

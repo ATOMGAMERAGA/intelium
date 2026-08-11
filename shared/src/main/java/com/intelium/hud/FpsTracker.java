@@ -81,5 +81,8 @@ public final class FpsTracker {
     public void reset() {
         idx = 0;
         count = 0;
+        // Also clear the ring itself, so stale samples cannot resurface if the
+        // indexing above ever changes.
+        Arrays.fill(samples, 0);
     }
 }

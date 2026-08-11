@@ -68,6 +68,23 @@ public final class AdaptiveDistanceController {
     /** Chunks shed per step in the severe band. */
     static final int SEVERE_STEP = 2;
     /**
+     * Ticks of measurement ignored after each severe (two-chunk) downward step
+     * (~1s). Shedding two chunks triggers its own chunk-graph churn, and
+     * counting that churn as "still low" cascades the reduction straight to
+     * the floor even when one step would have been enough. Moderate single
+     * steps keep reacting at full speed.
+     */
+    static final int DOWN_SETTLE_TICKS = 20;
+    /**
+     * Extra patience factor for the pinned-at-target recovery: when the frame
+     * rate sits at or above the target but cannot exceed it (VSync or an FPS
+     * cap at the target), the {@link #HIGH_FACTOR} headroom threshold is
+     * unattainable and a reduction would otherwise be stuck forever. Holding
+     * the target itself is evidence of headroom - just weaker evidence, so the
+     * hold is twice as long.
+     */
+    static final int AT_TARGET_UP_HOLD_MULTIPLIER = 2;
+    /**
      * Ticks of measurement ignored after each upward step (~3s): raising the
      * distance triggers a chunk-graph rebuild whose build burst reads as low
      * FPS, and counting it would immediately undo the step - the ping-pong
@@ -86,6 +103,8 @@ public final class AdaptiveDistanceController {
     private static final int NO_RECENT_UP_STEP = Integer.MAX_VALUE;
 
     private int lowTicks;
+    /** Consecutive ticks spent in the severe band specifically. */
+    private int severeTicks;
     private int highTicks;
     private int reduction;
     /** Countdown of post-up-step ticks during which samples are ignored. */
@@ -108,6 +127,7 @@ public final class AdaptiveDistanceController {
         if (targetFps < 1 || smoothedFps <= 0 || baseDistance <= MIN_DISTANCE) {
             // Nothing measurable, or no room to reduce: decay toward "hands off".
             lowTicks = 0;
+            severeTicks = 0;
             highTicks = 0;
             return currentCap(baseDistance);
         }
@@ -125,20 +145,33 @@ public final class AdaptiveDistanceController {
         }
 
         if (settleTicks > 0) {
-            // Our own upward step is still settling (chunk-graph rebuild in
-            // flight); its FPS dip is self-inflicted, so don't measure it.
+            // Our own step is still settling (chunk-graph rebuild in flight);
+            // its FPS dip is self-inflicted, so don't measure it.
             settleTicks--;
             lowTicks = 0;
+            severeTicks = 0;
             highTicks = 0;
             return currentCap(baseDistance);
         }
 
         if (smoothedFps < targetFps * LOW_FACTOR) {
             highTicks = 0;
-            boolean severe = smoothedFps < targetFps * SEVERE_FACTOR;
-            if (++lowTicks >= (severe ? SEVERE_HOLD_TICKS : DOWN_HOLD_TICKS)) {
+            lowTicks++;
+            // The severe two-chunk step needs a full halved-hold window spent
+            // in the severe band itself - time merely "low" does not qualify,
+            // so one severe sample after a long moderate dip cannot fire an
+            // immediate double step.
+            severeTicks = smoothedFps < targetFps * SEVERE_FACTOR ? severeTicks + 1 : 0;
+            boolean severe = severeTicks >= SEVERE_HOLD_TICKS;
+            if (severe || lowTicks >= DOWN_HOLD_TICKS) {
                 lowTicks = 0;
+                severeTicks = 0;
                 reduction = Math.min(maxReduction, reduction + (severe ? SEVERE_STEP : 1));
+                if (severe) {
+                    // A double step sheds a lot of geometry at once; let the
+                    // resulting rebuild churn pass before measuring again.
+                    settleTicks = DOWN_SETTLE_TICKS;
+                }
                 if (ticksSinceUpStep != NO_RECENT_UP_STEP) {
                     // The recent upward step didn't hold: wait exponentially
                     // longer before trying again, instead of ping-ponging (and
@@ -149,20 +182,40 @@ public final class AdaptiveDistanceController {
             }
         } else if (smoothedFps > targetFps * HIGH_FACTOR) {
             lowTicks = 0;
+            severeTicks = 0;
             if (++highTicks >= UP_HOLD_TICKS * upHoldMultiplier) {
                 highTicks = 0;
-                if (reduction > 0) {
-                    reduction--;
-                    ticksSinceUpStep = 0;
-                    settleTicks = SETTLE_TICKS;
-                }
+                stepUp();
+            }
+        } else if (smoothedFps >= targetFps) {
+            // At or above the target but without the full headroom margin.
+            // When the frame rate is pinned at the target by VSync or an FPS
+            // cap, the HIGH_FACTOR threshold can never be reached - without
+            // this branch a reduction would survive to the end of the session
+            // on a machine holding its target perfectly. Holding the target is
+            // still evidence of headroom, just weaker, so the hold doubles.
+            lowTicks = 0;
+            severeTicks = 0;
+            if (++highTicks >= UP_HOLD_TICKS * AT_TARGET_UP_HOLD_MULTIPLIER * upHoldMultiplier) {
+                highTicks = 0;
+                stepUp();
             }
         } else {
-            // Inside the dead band: hold steady.
+            // Inside the dead band below the target: hold steady.
             lowTicks = 0;
+            severeTicks = 0;
             highTicks = 0;
         }
         return currentCap(baseDistance);
+    }
+
+    /** One-chunk recovery step, with its settle window and probation timer. */
+    private void stepUp() {
+        if (reduction > 0) {
+            reduction--;
+            ticksSinceUpStep = 0;
+            settleTicks = SETTLE_TICKS;
+        }
     }
 
     /** Current backoff multiplier on the up-hold window (1 = no backoff). */
@@ -184,6 +237,7 @@ public final class AdaptiveDistanceController {
     /** Forgets all measurement state (world change, feature toggled off). */
     public void reset() {
         lowTicks = 0;
+        severeTicks = 0;
         highTicks = 0;
         reduction = 0;
         settleTicks = 0;

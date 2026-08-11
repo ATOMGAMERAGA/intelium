@@ -88,8 +88,12 @@ public final class ChunkBuilderTuner {
             target = Math.max(target, cpu - 1);
             ceiling += 2;
         }
-        // Never drop below a usable floor, never exceed the core count.
-        target = Math.max(2, Math.min(target, cpu));
+        // Never drop below a usable floor, never exceed the core count. On a
+        // dual-core the floor is 1: two workers there would hand every core to
+        // chunk meshing and starve the render thread - the opposite of what
+        // every profile promises.
+        int floor = cpu >= 3 ? 2 : 1;
+        target = Math.max(floor, Math.min(target, cpu));
 
         return clamp(1, Math.min(target, ceiling), cpu);
     }

@@ -119,4 +119,33 @@ class AbBenchmarkTest {
         }
         assertEquals(0.0, b.gainPercent(), 0.001);
     }
+
+    @Test
+    @DisplayName("Unmeasurable ticks (throttled frames) advance time but are not averaged")
+    void unmeasurableTicksSkipped() {
+        AbBenchmark b = new AbBenchmark(100, 100);
+        b.start(0, true, setEnabled, reload);
+        b.tick(100, 0);        // -> MEASURE_ON
+        b.tick(150, 100);      // measured
+        b.tick(175, 10, false); // alt-tabbed with a background cap: skipped
+        b.tick(200, 100);      // measured; closes MEASURE_ON
+        assertEquals(AbBenchmark.Phase.WARMUP_OFF, b.phase());
+        b.tick(300, 0);        // -> MEASURE_OFF
+        b.tick(350, 50);
+        b.tick(400, 50);       // closes MEASURE_OFF -> DONE
+        assertTrue(b.hasResult());
+        // The throttled 10-FPS sample must not have dragged the ON average.
+        assertEquals(100.0, b.onFps(), 0.001);
+        assertEquals(50.0, b.offFps(), 0.001);
+    }
+
+    @Test
+    @DisplayName("Degenerate durations are floored, so progress cannot divide by zero")
+    void degenerateDurationsFloored() {
+        AbBenchmark b = new AbBenchmark(0, 0);
+        b.start(0, true, setEnabled, reload);
+        assertDoesNotThrow(b::progressPercent);
+        b.tick(1, 60);
+        assertDoesNotThrow(b::progressPercent);
+    }
 }

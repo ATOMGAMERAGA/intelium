@@ -191,8 +191,65 @@ class AdaptiveDistanceControllerTest {
         AdaptiveDistanceController c = new AdaptiveDistanceController();
         feed(c, 20, AdaptiveDistanceController.SEVERE_HOLD_TICKS); // down 2
         assertEquals(BASE - 2, c.currentCap(BASE));
+        // The severe step opens its own settle window before measuring again.
+        feed(c, 90, AdaptiveDistanceController.DOWN_SETTLE_TICKS);
         assertEquals(BASE - 2, feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS - 1));
         assertEquals(BASE - 1, feed(c, 90, 1));
+    }
+
+    @Test
+    @DisplayName("A severe step is followed by a settle window, not an immediate cascade")
+    void severeStepSettlesBeforeCascading() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        feed(c, 20, AdaptiveDistanceController.SEVERE_HOLD_TICKS); // down 2
+        assertEquals(BASE - 2, c.currentCap(BASE));
+        // The rebuild churn of the double step reads as low FPS; during the
+        // settle window it must NOT feed the next step.
+        assertEquals(BASE - 2, feed(c, 20, AdaptiveDistanceController.DOWN_SETTLE_TICKS));
+        // A real, still-severe scene then needs a full severe hold again.
+        assertEquals(BASE - 2, feed(c, 20, AdaptiveDistanceController.SEVERE_HOLD_TICKS - 1));
+        assertEquals(BASE - 4, feed(c, 20, 1));
+    }
+
+    @Test
+    @DisplayName("A single severe sample after a moderate dip does not fire a double step")
+    void severeNeedsItsOwnHold() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        // 39 moderate-low ticks, then one severe sample: only a moderate
+        // single step may fire (on the 40th low tick), never the double step.
+        feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS - 1);
+        feed(c, 20, 1);
+        assertEquals(BASE - 1, c.currentCap(BASE));
+    }
+
+    @Test
+    @DisplayName("FPS pinned exactly at the target still recovers, on a doubled hold")
+    void pinnedAtTargetRecovers() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS); // down 1
+        assertEquals(BASE - 1, c.currentCap(BASE));
+        // VSync/FPS-cap at the target: 60 never exceeds 60 * 1.15, but the
+        // reduction must not be stuck forever. Twice the normal hold applies.
+        int hold = AdaptiveDistanceController.UP_HOLD_TICKS
+                * AdaptiveDistanceController.AT_TARGET_UP_HOLD_MULTIPLIER;
+        assertEquals(BASE - 1, feed(c, TARGET, hold - 1));
+        assertEquals(0, feed(c, TARGET, 1));
+        assertEquals(0, c.reduction());
+    }
+
+    @Test
+    @DisplayName("The pinned-at-target recovery honours the failure backoff")
+    void pinnedAtTargetHonoursBackoff() {
+        AdaptiveDistanceController c = new AdaptiveDistanceController();
+        feed(c, 40, AdaptiveDistanceController.DOWN_HOLD_TICKS * 2); // down 2
+        feed(c, 90, AdaptiveDistanceController.UP_HOLD_TICKS);       // up 1
+        feed(c, 40, AdaptiveDistanceController.SETTLE_TICKS
+                + AdaptiveDistanceController.DOWN_HOLD_TICKS);       // failed -> 2x
+        assertEquals(2, c.upHoldMultiplier());
+        int hold = AdaptiveDistanceController.UP_HOLD_TICKS
+                * AdaptiveDistanceController.AT_TARGET_UP_HOLD_MULTIPLIER * 2;
+        assertEquals(BASE - 2, feed(c, TARGET, hold - 1));
+        assertEquals(BASE - 1, feed(c, TARGET, 1));
     }
 
     @Test

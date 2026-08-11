@@ -164,4 +164,40 @@ class DetectionDecisionTest {
         assertEquals("intelium.disabled.too_old", r.reasonKey);
         assertEquals(IntelGpuGeneration.PRE_GEN9, r.generation);
     }
+
+    @Test
+    @DisplayName("Vendor 'Intel Corporation' is Intel, not AMD ('ati' in 'Corporation')")
+    void intelCorporationIsIntel() {
+        // Regression: "Corpor-ati-on" used to satisfy the raw "ati" substring
+        // check, refusing supported Intel hardware with the AMD message.
+        IntelGpuClassifier.Result r = decide("Intel Corporation",
+                "Intel(R) UHD Graphics 620");
+        assertTrue(r.compatible);
+        assertEquals(IntelGpuGeneration.GEN9_5_KABY_COFFEE, r.generation);
+    }
+
+    @Test
+    @DisplayName("Vendor 'Microsoft Corporation' is unknown, not AMD")
+    void microsoftCorporationIsUnknown() {
+        IntelGpuClassifier.Result r = decide("Microsoft Corporation", "D3D12 (WARP)");
+        assertFalse(r.compatible);
+        assertEquals("intelium.disabled.unknown_gpu", r.reasonKey);
+    }
+
+    @Test
+    @DisplayName("Real ATI vendor strings are still refused as AMD")
+    void realAtiStillRefused() {
+        IntelGpuClassifier.Result r = decide("ATI Technologies Inc.",
+                "ATI Radeon HD 5770");
+        assertFalse(r.compatible);
+        assertEquals("intelium.disabled.amd", r.reasonKey);
+    }
+
+    @Test
+    @DisplayName("Workstation Xeon iGPU (HD Graphics P630) is supported")
+    void workstationIgpuSupported() {
+        IntelGpuClassifier.Result r = decide("Intel", "Intel(R) HD Graphics P630");
+        assertTrue(r.compatible);
+        assertEquals(IntelGpuGeneration.GEN9_5_KABY_COFFEE, r.generation);
+    }
 }

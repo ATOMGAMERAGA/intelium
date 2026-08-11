@@ -74,7 +74,10 @@ public final class IntelGpuClassifier {
         if (v.contains("nvidia")) {
             return new Result(IntelGpuGeneration.UNKNOWN, false, "intelium.disabled.nvidia");
         }
-        if (v.contains("amd") || v.contains("ati")
+        // "ati" must be matched as a whole word: as a raw substring it matches
+        // "Corpor-ati-on", so "Intel Corporation" (a real Vulkan vendor string)
+        // would be refused as AMD hardware.
+        if (v.contains("amd") || v.matches(".*\\bati\\b.*")
                 || v.contains("advanced micro devices") || v.contains("radeon")) {
             return new Result(IntelGpuGeneration.UNKNOWN, false, "intelium.disabled.amd");
         }
@@ -118,7 +121,8 @@ public final class IntelGpuClassifier {
 
         // ---- Xe2: Battlemage (discrete) + Lunar Lake (integrated) ----
         if (r.contains("battlemage") || r.contains("bmg")
-                || r.contains("lunar") || r.contains("lnl")) {
+                || r.contains("lunar") || r.contains("lnl")
+                || r.matches(".*\\bxe2\\b.*")) {
             return IntelGpuGeneration.XE2_LUNAR_BATTLEMAGE;
         }
         // Discrete Arc B-series, e.g. "Arc B580".
@@ -159,7 +163,10 @@ public final class IntelGpuClassifier {
         }
 
         // ---- Gen 12 Xe-LP (Tiger/Alder/Raptor/Rocket Lake, Iris Xe, UHD 7xx) ----
-        if (r.contains("xe") || r.contains("tgl") || r.contains("tiger lake")
+        // "xe" must be matched as a whole word: as a raw substring it matches
+        // "Xeon", and a CPU model embedded in the renderer string ("... (Xeon
+        // E3-1505M)") would force-classify an older iGPU as Gen 12.
+        if (r.matches(".*\\bxe\\b.*") || r.contains("tgl") || r.contains("tiger lake")
                 || r.contains("alder lake") || r.contains("adl")
                 || r.contains("raptor lake") || r.contains("rpl")
                 || r.contains("rocket lake") || r.contains("dg1")
@@ -185,7 +192,9 @@ public final class IntelGpuClassifier {
         }
 
         // ---- Gen 9.5 Kaby/Coffee/Comet/Whiskey Lake (HD/UHD 6xx) ----
-        if (r.contains("uhd graphics 6") || r.matches(".*\\bhd graphics 6[0-4]\\d\\b.*")
+        // The optional "p" prefix covers the workstation Xeon iGPUs (HD
+        // Graphics P630 and friends) - same silicon, pro drivers.
+        if (r.contains("uhd graphics 6") || r.matches(".*\\bhd graphics p?6[0-4]\\d\\b.*")
                 || r.contains("kaby lake") || r.contains("kbl")
                 || r.contains("coffee lake") || r.contains("cfl")
                 || r.contains("comet lake") || r.contains("cml")
@@ -193,8 +202,8 @@ public final class IntelGpuClassifier {
             return IntelGpuGeneration.GEN9_5_KABY_COFFEE;
         }
 
-        // ---- Gen 9 Skylake (HD 5xx, Iris 540/550/580) ----
-        if (r.matches(".*\\bgraphics 5[0-8]\\d\\b.*")
+        // ---- Gen 9 Skylake (HD 5xx, Iris 540/550/580, workstation P5xx) ----
+        if (r.matches(".*\\bgraphics p?5[0-8]\\d\\b.*")
                 || r.contains("skylake") || r.contains("skl")) {
             return IntelGpuGeneration.GEN9_SKYLAKE;
         }

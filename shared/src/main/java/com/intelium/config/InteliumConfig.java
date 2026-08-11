@@ -218,6 +218,14 @@ public class InteliumConfig {
     public int overlayX = 4;
     public int overlayY = 4;
 
+    /**
+     * Upper bound for a persisted overlay position, in scaled GUI pixels.
+     * Comfortably beyond any real screen (8K at GUI scale 1 is 7680 wide) while
+     * still keeping a hand-edited or stale position on-screen-adjacent enough
+     * to recover by dragging.
+     */
+    public static final int MAX_OVERLAY_POS = 8192;
+
     // ---- Restore cache -----------------------------------------------------
 
     /**
@@ -257,29 +265,37 @@ public class InteliumConfig {
      */
     public static InteliumConfig sanitize(InteliumConfig cfg) {
         InteliumConfig defaults = new InteliumConfig();
-        if (cfg.profile == null) cfg.profile = defaults.profile;
-        if (cfg.chunkLoadingMode == null) cfg.chunkLoadingMode = defaults.chunkLoadingMode;
-        if (cfg.cloudsMode == null) cfg.cloudsMode = defaults.cloudsMode;
-        // Normalise the culling levels rather than merely null-check them: an
-        // unrecognised value already reads as "off" everywhere, so leaving the
-        // original string in the file would keep showing a setting that is off
-        // while the file claims otherwise, forever.
+        // Normalise every keyed choice rather than merely null-check it: an
+        // unrecognised value already falls back to its enum's safe mode at
+        // runtime, so leaving the original string in the file would keep the
+        // file claiming one thing while the mod does another, forever.
+        cfg.profile = cfg.profile == null ? defaults.profile
+                : com.intelium.optimization.OptimizationProfile.fromKey(cfg.profile).key;
+        cfg.chunkLoadingMode = cfg.chunkLoadingMode == null ? defaults.chunkLoadingMode
+                : com.intelium.optimization.ChunkLoadingMode.fromKey(cfg.chunkLoadingMode).key;
+        cfg.cloudsMode = cfg.cloudsMode == null ? defaults.cloudsMode
+                : com.intelium.optimization.CloudsMode.fromKey(cfg.cloudsMode).key;
         cfg.entityCulling = normalizeLevel(cfg.entityCulling, defaults.entityCulling);
         cfg.blockEntityCulling = normalizeLevel(cfg.blockEntityCulling, defaults.blockEntityCulling);
         cfg.particleBudget = normalizeLevel(cfg.particleBudget, defaults.particleBudget);
         cfg.chunkBuildWorkers = clamp(cfg.chunkBuildWorkers, 0, 16);
         cfg.maxEntityDistancePercent = clamp(cfg.maxEntityDistancePercent, 50, 100);
-        cfg.maxRenderDistance = cfg.maxRenderDistance <= 0
-                ? 0 : clamp(cfg.maxRenderDistance, 2, 32);
-        cfg.maxSimulationDistance = cfg.maxSimulationDistance <= 0
-                ? 0 : clamp(cfg.maxSimulationDistance, 5, 32);
+        // Values below each cap's meaningful minimum read as "off", not as
+        // consent for the harshest possible cap: a hand-edited
+        // "maxRenderDistance": 1 must not collapse the world to 2 chunks.
+        cfg.maxRenderDistance = cfg.maxRenderDistance < 2
+                ? 0 : Math.min(cfg.maxRenderDistance, 32);
+        cfg.maxSimulationDistance = cfg.maxSimulationDistance < 5
+                ? 0 : Math.min(cfg.maxSimulationDistance, 32);
         cfg.adaptiveFpsTarget = clamp(cfg.adaptiveFpsTarget, 30, 144);
         cfg.backgroundFpsLimit = cfg.backgroundFpsLimit <= 0
                 ? 0 : clamp(cfg.backgroundFpsLimit, 10, 60);
         cfg.menuFpsLimit = cfg.menuFpsLimit <= 0
                 ? 0 : clamp(cfg.menuFpsLimit, 10, 60);
-        cfg.overlayX = Math.max(0, cfg.overlayX);
-        cfg.overlayY = Math.max(0, cfg.overlayY);
+        // Bounded above as well, so a stale position from a larger monitor (or
+        // a hand-edited value) cannot park the overlay unreachably off-screen.
+        cfg.overlayX = clamp(cfg.overlayX, 0, MAX_OVERLAY_POS);
+        cfg.overlayY = clamp(cfg.overlayY, 0, MAX_OVERLAY_POS);
         if (cfg.captured == null) cfg.captured = new CapturedOptions();
         return cfg;
     }

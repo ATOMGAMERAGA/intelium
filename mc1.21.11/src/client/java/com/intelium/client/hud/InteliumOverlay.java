@@ -50,7 +50,12 @@ public final class InteliumOverlay {
         if (mc.currentScreen instanceof OverlayEditScreen) return;
         InteliumConfig cfg = InteliumConfigIO.get();
         if (!cfg.overlayEnabled) return;
-        render(ctx, mc.textRenderer, cfg.overlayX, cfg.overlayY, false);
+        // Clamp against the live screen size: a position saved on a larger
+        // monitor (or at a smaller GUI scale) must not park the panel
+        // invisibly off-screen. Panel size lags one frame; close enough.
+        int x = Math.max(0, Math.min(cfg.overlayX, ctx.getScaledWindowWidth() - lastWidth));
+        int y = Math.max(0, Math.min(cfg.overlayY, ctx.getScaledWindowHeight() - lastHeight));
+        render(ctx, mc.textRenderer, x, y, false);
     }
 
     /** Draws the panel at (x,y); returns {width,height}. */

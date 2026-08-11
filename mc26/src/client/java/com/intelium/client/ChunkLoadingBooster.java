@@ -42,6 +42,18 @@ public final class ChunkLoadingBooster {
             available = false;
             Intelium.LOGGER.warn("Intelium: Sodium's chunk defer mode isn't reachable on this "
                     + "Sodium build - fast chunk loading disabled (no crash).", t);
+            // With the internals unreachable, the restore path above can never
+            // run again either. If a capture is pending, Sodium may be left on
+            // the forced value; say so instead of silently stranding it, and
+            // drop the orphaned capture so it can't be mistaken for live state.
+            var cap = InteliumConfigIO.get().captured;
+            if (cap.sodiumDeferMode != null) {
+                Intelium.LOGGER.warn("Intelium: could not restore Sodium's original chunk defer "
+                        + "mode ({}); check Sodium's video settings if chunk loading feels "
+                        + "different.", cap.sodiumDeferMode);
+                cap.sodiumDeferMode = null;
+                InteliumConfigIO.flush();
+            }
         }
     }
 

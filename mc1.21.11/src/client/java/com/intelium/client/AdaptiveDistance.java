@@ -34,12 +34,29 @@ public final class AdaptiveDistance {
     /** Samples needed before the controller may act (~2s warm-up). */
     private static final int WARMUP_SAMPLES = 40;
 
+    /**
+     * Ticks to keep skipping samples after a hold ends: the game's FPS counter
+     * is a trailing ~1s average, so the first second after refocus / menu
+     * close still reflects the throttled frames.
+     */
+    private static final int RECOVERY_TICKS = 20;
+
     private static final AdaptiveDistanceController CONTROLLER = new AdaptiveDistanceController();
     private static volatile int cap = 0;
+    private static int recoveryTicks;
 
     /** Called once per client tick, before {@link RenderTweaks#apply()}. */
     public static void tick(MinecraftClient client) {
         InteliumConfig cfg = InteliumConfigIO.get();
+        // The benchmark check must come before the feature gate: the benchmark
+        // toggles Intelium.IS_ENABLED itself for its OFF half, and reading
+        // that as "feature turned off" dropped the reduction mid-run - a full
+        // chunk re-load in the middle of the measurement it was skewing.
+        if (AbBenchmark.INSTANCE.isRunning()) {
+            TRACKER.reset();
+            recoveryTicks = RECOVERY_TICKS;
+            return;
+        }
         boolean featureOn = Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE
                 && cfg.tuneFrameSettings && cfg.adaptiveRenderDistance
                 && client.world != null;
@@ -51,14 +68,20 @@ public final class AdaptiveDistance {
             }
             return;
         }
-        if (!client.isWindowFocused() || AbBenchmark.INSTANCE.isRunning()
-                || menuCapActive(client, cfg)) {
-            // Unfocused, benchmark-driven or menu-capped frames read as
-            // artificially low (or meaningless) FPS: hold the current
-            // reduction (dropping it would force a full chunk re-load on
-            // every alt-tab / menu) and forget the tainted samples, then
-            // re-warm up once the game is front and centre again.
+        if (!client.isWindowFocused() || menuCapActive(client, cfg)) {
+            // Unfocused or menu-capped frames read as artificially low (or
+            // meaningless) FPS: hold the current reduction (dropping it would
+            // force a full chunk re-load on every alt-tab / menu) and forget
+            // the tainted samples, then re-warm up once the game is front and
+            // centre again.
             TRACKER.reset();
+            recoveryTicks = RECOVERY_TICKS;
+            return;
+        }
+        if (recoveryTicks > 0) {
+            // The FPS counter is a trailing average; let the throttled frames
+            // age out of it before measuring again.
+            recoveryTicks--;
             return;
         }
         TRACKER.push(client.getCurrentFps());
@@ -73,7 +96,7 @@ public final class AdaptiveDistance {
 
     /** Whether the menu FPS limit is capping the frame rate right now. */
     private static boolean menuCapActive(MinecraftClient mc, InteliumConfig cfg) {
-        return cfg.menuFpsLimit > 0 && mc.currentScreen != null
+        return cfg.menuFpsLimit > 0 && RenderTweaks.menuScreenOpen(mc)
                 && !ModCompat.frameLimiterPresent();
     }
 
