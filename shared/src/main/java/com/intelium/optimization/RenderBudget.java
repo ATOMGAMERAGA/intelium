@@ -12,11 +12,13 @@ package com.intelium.optimization;
  * push - happens exactly once per client tick in {@link #update}, and what is
  * left at the call site is a couple of field reads and a compare.
  *
- * <p>Everything is static because there is one game and one camera; the fields
- * are volatile because they are written from the client tick and read from the
- * render path, which are the same thread in vanilla Minecraft but need not stay
- * that way. The two counters ({@link FrameBudget}, {@link TickBudget}) are only
- * ever touched from their own thread, as documented on each.
+ * <p>Everything is static because there is one game and one camera; the whole
+ * budget state is published as one immutable object through a single volatile
+ * field, because it is written from the client tick and read from the render
+ * path - the same thread in vanilla Minecraft, but it need not stay that way,
+ * and a torn read (new threshold against old pixel scale) must be impossible
+ * either way. The two counters ({@link FrameBudget}, {@link TickBudget}) are
+ * only ever touched from their own thread, as documented on each.
  *
  * <p>Pure logic, no Minecraft types - the per-version glue supplies the camera
  * numbers and the mixins ask the questions.
@@ -33,12 +35,18 @@ public final class RenderBudget {
     /** A block entity is a block: one block tall, by definition. */
     private static final double BLOCK_ENTITY_SIZE = 1.0;
 
-    private static volatile boolean active;
-    private static volatile double pixelScale;
-    private static volatile double entityMinPixels;
-    private static volatile double blockEntityMinPixels;
-    private static volatile int blockEntityLimit;
-    private static volatile int particleLimit;
+    /**
+     * One tick's computed budgets, published as a single immutable object so a
+     * reader can never observe half of one update and half of another (e.g. a
+     * new, tighter threshold against the previous camera's pixel scale).
+     */
+    private record State(boolean active, double pixelScale, double entityMinPixels,
+                         double blockEntityMinPixels, int blockEntityLimit, int particleLimit) {
+    }
+
+    private static final State DISABLED = new State(false, 0.0, 0.0, 0.0, 0, 0);
+
+    private static volatile State state = DISABLED;
 
     private static final FrameBudget BLOCK_ENTITIES = new FrameBudget();
     private static final TickBudget PARTICLES = new TickBudget();
@@ -66,19 +74,19 @@ public final class RenderBudget {
         }
         double p = adaptive ? Math.max(0.0, Math.min(1.0, pressure)) : 0.0;
 
-        pixelScale = RenderBudgetTuning.pixelScale(framebufferHeight, fovDegrees);
-        entityMinPixels = RenderBudgetTuning.tightenThreshold(
-                RenderBudgetTuning.entityMinPixels(entities), p);
         // Block entities get the same apparent-size scale, but read it off
         // their own level: whoever turns entity culling off has not thereby
         // said anything about chests.
-        blockEntityMinPixels = RenderBudgetTuning.tightenThreshold(
-                RenderBudgetTuning.entityMinPixels(blockEntities), p);
-        blockEntityLimit = RenderBudgetTuning.tightenBudget(
-                RenderBudgetTuning.blockEntityBudget(blockEntities), p, BLOCK_ENTITY_FLOOR);
-        particleLimit = RenderBudgetTuning.tightenBudget(
-                RenderBudgetTuning.particleBudget(particles), p, PARTICLE_FLOOR);
-        active = true;
+        state = new State(true,
+                RenderBudgetTuning.pixelScale(framebufferHeight, fovDegrees),
+                RenderBudgetTuning.tightenThreshold(
+                        RenderBudgetTuning.entityMinPixels(entities), p),
+                RenderBudgetTuning.tightenThreshold(
+                        RenderBudgetTuning.entityMinPixels(blockEntities), p),
+                RenderBudgetTuning.tightenBudget(
+                        RenderBudgetTuning.blockEntityBudget(blockEntities), p, BLOCK_ENTITY_FLOOR),
+                RenderBudgetTuning.tightenBudget(
+                        RenderBudgetTuning.particleBudget(particles), p, PARTICLE_FLOOR));
     }
 
     /**
@@ -87,25 +95,22 @@ public final class RenderBudget {
      * means for the engine, and it is instant.
      */
     public static void disable() {
-        active = false;
-        entityMinPixels = 0.0;
-        blockEntityMinPixels = 0.0;
-        blockEntityLimit = 0;
-        particleLimit = 0;
+        state = DISABLED;
         BLOCK_ENTITIES.reset();
         PARTICLES.reset();
     }
 
     /** Whether the engine is live at all. */
     public static boolean isActive() {
-        return active;
+        return state.active;
     }
 
     // ---- Entity budget ---------------------------------------------------
 
     /** Whether the entity budget is doing anything (cheap pre-check for hooks). */
     public static boolean entityCullingOn() {
-        return active && entityMinPixels > 0.0 && pixelScale > 0.0;
+        State s = state;
+        return s.active && s.entityMinPixels > 0.0 && s.pixelScale > 0.0;
     }
 
     /**
@@ -114,16 +119,18 @@ public final class RenderBudget {
      * Answers false whenever anything is unknown.
      */
     public static boolean shouldCullEntity(double sizeBlocks, double distanceSq) {
-        if (!active) return false;
+        State s = state;
+        if (!s.active) return false;
         return RenderBudgetTuning.tooSmallToDraw(sizeBlocks, distanceSq,
-                pixelScale, entityMinPixels);
+                s.pixelScale, s.entityMinPixels);
     }
 
     // ---- Block-entity budget ---------------------------------------------
 
     /** Whether the block-entity budget is doing anything. */
     public static boolean blockEntityBudgetOn() {
-        return active && blockEntityLimit > 0;
+        State s = state;
+        return s.active && s.blockEntityLimit > 0;
     }
 
     /**
@@ -133,9 +140,10 @@ public final class RenderBudget {
      * block-entity level rather than the entity one.
      */
     public static boolean shouldCullBlockEntity(double distanceSq) {
-        if (!active) return false;
+        State s = state;
+        if (!s.active) return false;
         return RenderBudgetTuning.tooSmallToDraw(BLOCK_ENTITY_SIZE, distanceSq,
-                pixelScale, blockEntityMinPixels);
+                s.pixelScale, s.blockEntityMinPixels);
     }
 
     /**
@@ -145,8 +153,9 @@ public final class RenderBudget {
      * @return true if this block entity may be drawn
      */
     public static boolean allowBlockEntity(long nowNanos) {
-        if (!active || blockEntityLimit <= 0) return true;
-        return BLOCK_ENTITIES.tryConsume(nowNanos, blockEntityLimit);
+        State s = state;
+        if (!s.active || s.blockEntityLimit <= 0) return true;
+        return BLOCK_ENTITIES.tryConsume(nowNanos, s.blockEntityLimit);
     }
 
     /** How many block-entity draws the previous frame skipped. */
@@ -168,13 +177,15 @@ public final class RenderBudget {
 
     /** Whether the particle budget is doing anything. */
     public static boolean particleBudgetOn() {
-        return active && particleLimit > 0;
+        State s = state;
+        return s.active && s.particleLimit > 0;
     }
 
     /** Claims one particle spawn out of this tick's allowance. */
     public static boolean allowParticle() {
-        if (!active || particleLimit <= 0) return true;
-        return PARTICLES.tryConsume(particleLimit);
+        State s = state;
+        if (!s.active || s.particleLimit <= 0) return true;
+        return PARTICLES.tryConsume(s.particleLimit);
     }
 
     /** How many particle spawns the previous tick turned away. */
@@ -191,21 +202,21 @@ public final class RenderBudget {
 
     /** The effective minimum on-screen entity height, in pixels. 0 = off. */
     public static double effectiveEntityMinPixels() {
-        return entityMinPixels;
+        return state.entityMinPixels;
     }
 
     /** The effective minimum on-screen block-entity height, in pixels. 0 = off. */
     public static double effectiveBlockEntityMinPixels() {
-        return blockEntityMinPixels;
+        return state.blockEntityMinPixels;
     }
 
     /** The effective per-frame block-entity ceiling. 0 = unlimited. */
     public static int effectiveBlockEntityLimit() {
-        return blockEntityLimit;
+        return state.blockEntityLimit;
     }
 
     /** The effective per-tick particle spawn ceiling. 0 = unlimited. */
     public static int effectiveParticleLimit() {
-        return particleLimit;
+        return state.particleLimit;
     }
 }

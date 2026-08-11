@@ -145,4 +145,22 @@ class ChunkBuilderTunerTest {
         var ctor = ChunkBuilderTuner.class.getDeclaredConstructor();
         assertTrue(java.lang.reflect.Modifier.isPrivate(ctor.getModifiers()));
     }
+
+    @Test
+    @DisplayName("A dual-core never hands every core to chunk building")
+    void dualCoreKeepsRenderHeadroom() {
+        // On 1-2 cores the old floor of 2 workers took the whole machine,
+        // starving the render thread under every profile.
+        for (OptimizationProfile p : OptimizationProfile.values()) {
+            for (IntelGpuGeneration gen : IntelGpuGeneration.values()) {
+                assertEquals(1, ChunkBuilderTuner.recommendedWorkers(gen, p, 1),
+                        gen + "/" + p + " cpu=1");
+                assertEquals(1, ChunkBuilderTuner.recommendedWorkers(gen, p, 2),
+                        gen + "/" + p + " cpu=2");
+            }
+        }
+        // From 3 cores up the usable floor of 2 workers applies again.
+        assertEquals(2, ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN9_SKYLAKE, OptimizationProfile.MAX_FPS, 3));
+    }
 }

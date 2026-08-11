@@ -202,10 +202,16 @@ class InteliumConfigTest {
         InteliumConfig c = new InteliumConfig();
         c.adaptiveFpsTarget = 5;
         c.backgroundFpsLimit = 999;
+        // Below the smallest meaningful cap: reads as "off", never as consent
+        // for the harshest possible cap.
         c.maxSimulationDistance = 1;
         InteliumConfig.sanitize(c);
         assertEquals(30, c.adaptiveFpsTarget);
         assertEquals(60, c.backgroundFpsLimit);
+        assertEquals(0, c.maxSimulationDistance);
+
+        c.maxSimulationDistance = 5;
+        InteliumConfig.sanitize(c);
         assertEquals(5, c.maxSimulationDistance);
 
         c.adaptiveFpsTarget = 500;
@@ -255,10 +261,37 @@ class InteliumConfigTest {
         assertEquals("default", c.cloudsMode);
         assertEquals(16, c.chunkBuildWorkers);
         assertEquals(50, c.maxEntityDistancePercent);
-        assertEquals(2, c.maxRenderDistance);
+        // 1 is below the smallest meaningful render-distance cap: it reads as
+        // "off" rather than collapsing the world to 2 chunks.
+        assertEquals(0, c.maxRenderDistance);
         assertEquals(0, c.overlayX);
         assertEquals(0, c.overlayY);
         assertNotNull(c.captured);
+    }
+
+    @Test
+    @DisplayName("sanitize normalizes unreadable keyed choices and bounds the overlay")
+    void sanitizeNormalizesKeysAndOverlay() {
+        InteliumConfig c = new InteliumConfig();
+        c.profile = "ultra";
+        c.chunkLoadingMode = "warp";
+        c.cloudsMode = "offf";
+        c.overlayX = 99999;
+        c.overlayY = 123456;
+
+        InteliumConfig.sanitize(c);
+
+        // Unreadable keys are rewritten to what the mod will actually do, so
+        // the file can never claim one thing while the mod does another.
+        assertEquals("balanced", c.profile);
+        assertEquals("off", c.chunkLoadingMode);
+        assertEquals("default", c.cloudsMode);
+        assertEquals(InteliumConfig.MAX_OVERLAY_POS, c.overlayX);
+        assertEquals(InteliumConfig.MAX_OVERLAY_POS, c.overlayY);
+
+        c.maxRenderDistance = 2;
+        InteliumConfig.sanitize(c);
+        assertEquals(2, c.maxRenderDistance);
     }
 
     @Test

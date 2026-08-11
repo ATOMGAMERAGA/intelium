@@ -37,6 +37,14 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
         return Identifier.of("intelium", path);
     }
 
+    /**
+     * An option's own explanatory tooltip with the live status line appended,
+     * so showing the GPU status no longer costs the option its explanation.
+     */
+    private static Text tooltipWithStatus(String key) {
+        return Text.translatable(key).append("\n\n").append(statusTooltip());
+    }
+
     /** Live status line shown as the tooltip on the interactive options. */
     private static Text statusTooltip() {
         if (Intelium.IS_COMPATIBLE) {
@@ -77,7 +85,7 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                         .setName(Text.translatable("intelium.options.group.core"))
                         .addOption(builder.createBooleanOption(id("enable"))
                                 .setName(Text.translatable("intelium.options.enable"))
-                                .setTooltip(v -> statusTooltip())
+                                .setTooltip(v -> tooltipWithStatus("intelium.options.enable.tooltip"))
                                 .setStorageHandler(saveHook)
                                 .setEnabledProvider(state -> Intelium.IS_COMPATIBLE)
                                 .setBinding(v -> { cfg.enabled = v; Intelium.IS_ENABLED = v; },
@@ -100,7 +108,7 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(id("chunk_workers"))
                                 .setName(Text.translatable("intelium.options.chunk_workers"))
-                                .setTooltip(v -> statusTooltip())
+                                .setTooltip(v -> tooltipWithStatus("intelium.options.chunk_workers.tooltip"))
                                 .setRange(0, 16, 1)
                                 .setValueFormatter(value -> value <= 0
                                         ? Text.translatable("intelium.options.chunk_workers.auto")
@@ -261,13 +269,15 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                         .addOption(builder.createIntegerOption(id("adaptive_fps_target"))
                                 .setName(Text.translatable("intelium.options.adaptive_fps_target"))
                                 .setTooltip(Text.translatable("intelium.options.adaptive_fps_target.tooltip"))
-                                .setRange(30, 120, 5)
+                                // Matches InteliumConfig.sanitize's 30-144 range, so a
+                                // hand-edited 144 isn't silently rewritten to 120 here.
+                                .setRange(30, 144, 6)
                                 .setValueFormatter(value -> Text.literal(value + " FPS"))
                                 .setStorageHandler(saveHook)
                                 .setEnabledProvider(state -> Intelium.IS_COMPATIBLE
                                         && cfg.tuneFrameSettings && cfg.adaptiveRenderDistance)
                                 .setBinding(v -> cfg.adaptiveFpsTarget = v,
-                                            () -> Math.max(30, Math.min(120, cfg.adaptiveFpsTarget)))
+                                            () -> Math.max(30, Math.min(144, cfg.adaptiveFpsTarget)))
                                 .setDefaultValue(60)
                         )
                         .addOption(builder.createIntegerOption(id("background_fps"))

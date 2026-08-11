@@ -79,7 +79,7 @@ public final class ModCompat {
     }
 
     /** Logs detected companions exactly once, for diagnostics. */
-    public static void logOnce() {
+    public static synchronized void logOnce() {
         if (logged) return;
         logged = true;
         if (asyncParticlesPresent()) {

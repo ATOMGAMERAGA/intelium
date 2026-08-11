@@ -33,13 +33,26 @@ public final class RenderBudgetDriver {
 
     private static final FramePressure PRESSURE = new FramePressure();
 
+    /**
+     * Ticks to keep skipping samples after a throttled stretch ends: the FPS
+     * counter is a trailing ~1s average, so the first second after refocus /
+     * menu close still reflects the throttled frames.
+     */
+    private static final int RECOVERY_TICKS = 20;
+    private static int recoveryTicks;
+
     /** Called once per client tick, before {@link RenderTweaks#apply()}. */
     public static void tick(Minecraft client) {
         if (client == null) return;
         // A fresh tick's particle allowance, whether or not the budget is on -
         // so turning it on mid-explosion starts from a clean count.
         RenderBudget.beginTick();
-        if (measurable(client)) {
+        if (!measurable(client)) {
+            recoveryTicks = RECOVERY_TICKS;
+        } else if (recoveryTicks > 0) {
+            // Let the throttled frames age out of the trailing FPS counter.
+            recoveryTicks--;
+        } else {
             PRESSURE.push(client.getFps());
         }
         reconcile(client);

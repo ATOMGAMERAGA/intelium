@@ -22,27 +22,70 @@ public final class MenuScreenProbe {
 
     private static final Field SCREEN_FIELD;
     private static final Method SCREEN_METHOD;
+    /** {@code Screen.isPauseScreen()} on the resolved screen type, if present. */
+    private static final Method PAUSE_METHOD;
 
     static {
         Field f = null;
         Method m = null;
+        Method pause = null;
         try {
-            for (Field candidate : Minecraft.class.getDeclaredFields()) {
-                if (Modifier.isStatic(candidate.getModifiers())) continue;
-                if ("Screen".equals(candidate.getType().getSimpleName())) {
+            // The exact historical name first: Minecraft.screen. Falling back
+            // to "any member whose type is named Screen" is kept, but pinned
+            // down - getDeclaredFields() order is unspecified, and a blind
+            // "first match" could bind a pending/last-screen field that is
+            // usually null, silently breaking the menu FPS limit.
+            try {
+                Field candidate = Minecraft.class.getDeclaredField("screen");
+                if (!Modifier.isStatic(candidate.getModifiers())
+                        && isScreenType(candidate.getType())) {
                     candidate.setAccessible(true);
                     f = candidate;
-                    break;
+                }
+            } catch (NoSuchFieldException ignored) {
+                // Renamed; fall through to the scans below.
+            }
+            if (f == null) {
+                for (Field candidate : Minecraft.class.getDeclaredFields()) {
+                    if (Modifier.isStatic(candidate.getModifiers())) continue;
+                    if (isScreenType(candidate.getType())
+                            && candidate.getName().toLowerCase(java.util.Locale.ROOT)
+                                    .contains("screen")) {
+                        candidate.setAccessible(true);
+                        f = candidate;
+                        break;
+                    }
                 }
             }
             if (f == null) {
-                for (Method candidate : Minecraft.class.getMethods()) {
+                // Method fallback: only getter-shaped names declared on
+                // Minecraft itself. A blanket scan over all public methods
+                // could bind a factory that allocates a screen per call -
+                // this probe is invoked every tick.
+                for (Method candidate : Minecraft.class.getDeclaredMethods()) {
                     if (Modifier.isStatic(candidate.getModifiers())) continue;
-                    if (candidate.getParameterCount() == 0
-                            && "Screen".equals(candidate.getReturnType().getSimpleName())) {
+                    if (!Modifier.isPublic(candidate.getModifiers())) continue;
+                    String name = candidate.getName().toLowerCase(java.util.Locale.ROOT);
+                    boolean getterShaped = name.equals("screen") || name.equals("getscreen")
+                            || name.equals("currentscreen") || name.equals("getcurrentscreen");
+                    if (getterShaped && candidate.getParameterCount() == 0
+                            && isScreenType(candidate.getReturnType())) {
                         m = candidate;
                         break;
                     }
+                }
+            }
+            // Resolve Screen.isPauseScreen() from whichever type we found, so
+            // the menu cap can exempt world-visible screens (chat, death
+            // screen) instead of throttling gameplay mid-combat.
+            Class<?> screenType = f != null ? f.getType() : (m != null ? m.getReturnType() : null);
+            if (screenType != null) {
+                try {
+                    pause = screenType.getMethod("isPauseScreen");
+                    if (pause.getReturnType() != boolean.class) pause = null;
+                } catch (NoSuchMethodException ignored) {
+                    // Renamed on this build: treat every screen as a menu, the
+                    // pre-1.3.1 behaviour.
                 }
             }
         } catch (Throwable t) {
@@ -50,9 +93,11 @@ public final class MenuScreenProbe {
                     + "accessor; the menu FPS limit is disabled on this build.", t);
             f = null;
             m = null;
+            pause = null;
         }
         SCREEN_FIELD = f;
         SCREEN_METHOD = m;
+        PAUSE_METHOD = pause;
         if (f == null && m == null) {
             Intelium.LOGGER.info("Intelium: no current-screen accessor found on this Minecraft "
                     + "build; the menu FPS limit is unavailable (everything else works).");
@@ -61,19 +106,37 @@ public final class MenuScreenProbe {
 
     private MenuScreenProbe() {}
 
+    /** Whether {@code type} is Minecraft's Screen class (name and package). */
+    private static boolean isScreenType(Class<?> type) {
+        return "Screen".equals(type.getSimpleName())
+                && type.getName().startsWith("net.minecraft.");
+    }
+
     /** Whether this Minecraft build exposes the current screen at all. */
     public static boolean available() {
         return SCREEN_FIELD != null || SCREEN_METHOD != null;
     }
 
-    /** True when a menu screen is open; false when unknown or unavailable. */
+    /**
+     * True when a menu that hides gameplay is open; false when unknown or
+     * unavailable. Screens the player watches the live world through (chat,
+     * the death screen) do not count - capping those would drop the whole
+     * game to the menu limit mid-combat.
+     */
     public static boolean menuOpen(Minecraft mc) {
         try {
-            if (SCREEN_FIELD != null) return SCREEN_FIELD.get(mc) != null;
-            if (SCREEN_METHOD != null) return SCREEN_METHOD.invoke(mc) != null;
+            Object screen = null;
+            if (SCREEN_FIELD != null) {
+                screen = SCREEN_FIELD.get(mc);
+            } else if (SCREEN_METHOD != null) {
+                screen = SCREEN_METHOD.invoke(mc);
+            }
+            if (screen == null) return false;
+            return PAUSE_METHOD == null || (Boolean) PAUSE_METHOD.invoke(screen);
         } catch (Throwable t) {
-            // Never let a reflective hiccup reach the render loop.
+            // Never let a reflective hiccup reach the render loop; failing
+            // toward "no cap" is the harmless direction.
+            return false;
         }
-        return false;
     }
 }

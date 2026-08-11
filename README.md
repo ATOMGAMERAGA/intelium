@@ -60,8 +60,8 @@ contains both; pick the one matching your Minecraft version.
 
 | Jar | Minecraft | Java | Renderer | Sodium |
 |---|---|---|---|---|
-| `Intelium-v1.3.0-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
-| `Intelium-v1.3.0-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
+| `Intelium-v1.3.1-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
+| `Intelium-v1.3.1-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
 
 - Fabric Loader **0.18.3+**
 - Fabric API

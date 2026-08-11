@@ -212,7 +212,14 @@ public final class RenderTweaks {
             }
             return captured;
         } else if (cap.graphics != null) {
-            setIfChanged(opt, parseEnum(GraphicsPreset.class, cap.graphics, opt.get()));
+            // The same CUSTOM respect on the way out: if the user hand-tuned
+            // individual options while the lever was on (preset now CUSTOM),
+            // restoring the captured preset would apply it as a group and wipe
+            // their mix - the exact stomp the on-path refuses. Just forget the
+            // capture and leave their choices alone.
+            if (opt.get() != GraphicsPreset.CUSTOM) {
+                setIfChanged(opt, parseEnum(GraphicsPreset.class, cap.graphics, opt.get()));
+            }
             cap.graphics = null;
             return true;
         }
@@ -273,17 +280,35 @@ public final class RenderTweaks {
         }
     }
 
+    /** Latched true when the option's value type is no longer Integer. */
+    private static volatile boolean menuBlurBroken;
+
     /** Whether this Minecraft build still exposes the menu-blur option. */
     public static boolean menuBlurAvailable() {
-        return MENU_BLUR_ACCESSOR != null;
+        return MENU_BLUR_ACCESSOR != null && !menuBlurBroken;
     }
 
     @SuppressWarnings("unchecked")
     private static OptionInstance<Integer> menuBlurOption(Options o) {
-        if (MENU_BLUR_ACCESSOR == null) return null;
+        if (MENU_BLUR_ACCESSOR == null || menuBlurBroken) return null;
         try {
-            return (OptionInstance<Integer>) MENU_BLUR_ACCESSOR.invoke(o);
+            OptionInstance<Integer> opt = (OptionInstance<Integer>) MENU_BLUR_ACCESSOR.invoke(o);
+            // The <Integer> above is erased and unchecked: if a 26.x build
+            // turns blurriness into a Double/Float option, the accessor still
+            // resolves and the cast still "succeeds" - it is opt.get() that
+            // would explode later, on the tick handler. Verify the value type
+            // once and stand the lever down instead.
+            if (opt != null && !(opt.get() instanceof Integer)) {
+                menuBlurBroken = true;
+                Intelium.LOGGER.warn("Intelium: the menu-blur option is no longer an integer on "
+                        + "this Minecraft build - the menu blur lever is disabled (no crash).");
+                return null;
+            }
+            return opt;
         } catch (Throwable t) {
+            menuBlurBroken = true;
+            Intelium.LOGGER.warn("Intelium: the menu-blur option is not readable on this "
+                    + "Minecraft build - the menu blur lever is disabled (no crash).", t);
             return null;
         }
     }
@@ -294,20 +319,29 @@ public final class RenderTweaks {
         // frame - real GPU cost on an iGPU whenever any screen is open.
         OptionInstance<Integer> opt = menuBlurOption(o);
         if (opt == null) return false;
-        if (on) {
-            boolean captured = false;
-            if (cap.menuBlur == null) {
-                cap.menuBlur = opt.get();
-                captured = true;
+        try {
+            if (on) {
+                boolean captured = false;
+                if (cap.menuBlur == null) {
+                    cap.menuBlur = opt.get();
+                    captured = true;
+                }
+                setIfChanged(opt, 0);
+                return captured;
+            } else if (cap.menuBlur != null) {
+                setIfChanged(opt, cap.menuBlur);
+                cap.menuBlur = null;
+                return true;
             }
-            setIfChanged(opt, 0);
-            return captured;
-        } else if (cap.menuBlur != null) {
-            setIfChanged(opt, cap.menuBlur);
-            cap.menuBlur = null;
-            return true;
+            return false;
+        } catch (Throwable t) {
+            // Vanilla validation (or a changed value contract) rejected the
+            // write: this must never escape into the tick handler.
+            menuBlurBroken = true;
+            Intelium.LOGGER.warn("Intelium: applying the menu blur lever failed on this "
+                    + "Minecraft build - the lever is disabled (no crash).", t);
+            return false;
         }
-        return false;
     }
 
     private static boolean applyRenderDistance(Options o, InteliumConfig.CapturedOptions cap,

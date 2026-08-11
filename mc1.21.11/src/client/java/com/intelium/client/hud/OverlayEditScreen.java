@@ -21,6 +21,8 @@ public class OverlayEditScreen extends Screen {
     private boolean dragging;
     private int dragOffsetX;
     private int dragOffsetY;
+    /** Whether this edit session turned the overlay on just to show it. */
+    private boolean overlayForcedOn;
 
     public OverlayEditScreen(Screen parent) {
         super(Text.translatable("intelium.edit.title"));
@@ -31,17 +33,25 @@ public class OverlayEditScreen extends Screen {
     protected void init() {
         InteliumConfig cfg = InteliumConfigIO.get();
 
-        // Make sure the overlay is visible while editing it.
-        if (!cfg.overlayEnabled) {
+        // Make sure the overlay is visible while editing it - but remember
+        // that we did, so closing the editor puts the user's own Off back
+        // instead of silently force-enabling the overlay forever. init()
+        // re-runs on window resize, so only the first run may capture.
+        if (!cfg.overlayEnabled && !overlayForcedOn) {
+            overlayForcedOn = true;
             cfg.overlayEnabled = true;
             InteliumConfigIO.flush();
         }
 
-        this.addDrawableChild(ButtonWidget.builder(
+        // The benchmark measures world rendering; from the title screen there
+        // is nothing to measure and the "result" would be presented as real.
+        ButtonWidget run = ButtonWidget.builder(
                         Text.translatable("intelium.edit.run"),
                         b -> startBenchmark())
                 .dimensions(this.width / 2 - 100, this.height - 52, 200, 20)
-                .build());
+                .build();
+        run.active = this.client != null && this.client.world != null;
+        this.addDrawableChild(run);
 
         this.addDrawableChild(ButtonWidget.builder(Text.translatable("gui.done"), b -> close())
                 .dimensions(this.width / 2 - 100, this.height - 28, 200, 20)
@@ -49,6 +59,7 @@ public class OverlayEditScreen extends Screen {
     }
 
     private void startBenchmark() {
+        if (this.client == null || this.client.world == null) return;
         InteliumConfig cfg = InteliumConfigIO.get();
         AbBenchmark.INSTANCE.start(System.currentTimeMillis(), cfg.enabled,
                 enabled -> Intelium.IS_ENABLED = enabled,
@@ -114,6 +125,11 @@ public class OverlayEditScreen extends Screen {
 
     @Override
     public void close() {
+        if (overlayForcedOn) {
+            // The overlay was only on for this edit session: restore the
+            // user's own choice instead of leaving it silently enabled.
+            InteliumConfigIO.get().overlayEnabled = false;
+        }
         InteliumConfigIO.flush();
         if (this.client != null) {
             this.client.setScreen(parent);

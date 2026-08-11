@@ -117,6 +117,7 @@
     "intelium.disabled.nvidia": "NVIDIA GPU tespit edildi - Intelium yalnızca Intel için. Nvidium'u kullan.",
     "intelium.disabled.amd": "AMD GPU tespit edildi - Intelium yalnızca Intel için.",
     "intelium.disabled.unknown_gpu": "Bilinmeyen GPU üreticisi - Intelium Intel gerektirir.",
+    "intelium.disabled.no_gl": "GPU'yu tanımlamak için OpenGL bağlamı yok (Vulkan işleyici) - Intelium bu işleyicide şimdilik devre dışı kalıyor.",
     "intelium.disabled.virgl": "VirGL sanal GPU'su tespit edildi ancak ana makinenin GPU'su gizli - Intel GPU doğrulanamıyor. Gerçek GPU'nun aktarılması için VM/konteynerin Mesa ve virglrenderer sürümünü güncelleyin.",
     "intelium.disabled.unrecognized_intel": "Intel GPU tanınmadı - kararlılık için devre dışı kalınıyor.",
     "intelium.disabled.too_old": "Intel GPU'nuz HD Graphics 520'den (Gen 9 / Skylake) eski. Sodium varsayılan davranışı kullanılacak.",

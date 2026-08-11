@@ -32,8 +32,16 @@ public final class AdaptiveDistance {
     /** Samples needed before the controller may act (~2s warm-up). */
     private static final int WARMUP_SAMPLES = 40;
 
+    /**
+     * Ticks to keep skipping samples after a hold ends: the game's FPS counter
+     * is a trailing ~1s average, so the first second after refocus / menu
+     * close still reflects the throttled frames.
+     */
+    private static final int RECOVERY_TICKS = 20;
+
     private static final AdaptiveDistanceController CONTROLLER = new AdaptiveDistanceController();
     private static volatile int cap = 0;
+    private static int recoveryTicks;
 
     /** Called once per client tick, before {@link RenderTweaks#apply()}. */
     public static void tick(Minecraft client) {
@@ -55,6 +63,13 @@ public final class AdaptiveDistance {
             // re-load on every alt-tab / menu) and forget the tainted samples,
             // then re-warm up once the game is front and centre again.
             TRACKER.reset();
+            recoveryTicks = RECOVERY_TICKS;
+            return;
+        }
+        if (recoveryTicks > 0) {
+            // The FPS counter is a trailing average; let the throttled frames
+            // age out of it before measuring again.
+            recoveryTicks--;
             return;
         }
         TRACKER.push(client.getFps());

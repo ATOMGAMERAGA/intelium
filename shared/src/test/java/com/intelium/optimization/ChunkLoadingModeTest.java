@@ -26,11 +26,13 @@ class ChunkLoadingModeTest {
     }
 
     @Test
-    @DisplayName("fromKey falls back to FAST for null/unknown")
+    @DisplayName("fromKey: missing falls back to FAST, unreadable to OFF")
     void fallback() {
+        // A missing key gets the shipped default; a present but unreadable one
+        // must never be taken as permission to actively override Sodium.
         assertEquals(ChunkLoadingMode.FAST, ChunkLoadingMode.fromKey(null));
-        assertEquals(ChunkLoadingMode.FAST, ChunkLoadingMode.fromKey(""));
-        assertEquals(ChunkLoadingMode.FAST, ChunkLoadingMode.fromKey("nonsense"));
+        assertEquals(ChunkLoadingMode.OFF, ChunkLoadingMode.fromKey(""));
+        assertEquals(ChunkLoadingMode.OFF, ChunkLoadingMode.fromKey("nonsense"));
     }
 
     @Test

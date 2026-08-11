@@ -50,7 +50,12 @@ public enum ChunkLoadingMode {
 
     /**
      * Parses a persisted key back to a mode, tolerating null / unknown /
-     * differently-cased values by falling back to {@link #FAST}. Never throws.
+     * differently-cased values. Never throws.
+     *
+     * <p>A missing key falls back to the shipped default ({@link #FAST}); a
+     * present but unrecognised one falls back to {@link #OFF}, because a value
+     * nobody can read must never be taken as permission to actively override
+     * Sodium's defer mode.
      */
     public static ChunkLoadingMode fromKey(String key) {
         if (key == null) return FAST;
@@ -58,6 +63,6 @@ public enum ChunkLoadingMode {
         for (ChunkLoadingMode m : values()) {
             if (m.key.equals(k)) return m;
         }
-        return FAST;
+        return OFF;
     }
 }

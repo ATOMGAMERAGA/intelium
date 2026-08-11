@@ -32,24 +32,56 @@ public class InteliumClientInit implements ClientModInitializer {
         ModCompat.logOnce();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            IntelGpuDetector.detectOnce();
-            // Feed the adaptive render-distance controller first so the cap it
-            // publishes is applied by RenderTweaks in the same tick.
-            AdaptiveDistance.tick(client);
-            // Recompute the render budgets from the config, the camera and the
-            // current FPS pressure, so this tick's frames read fresh numbers.
-            RenderBudgetDriver.tick(client);
-            // Keep the live render tweaks reconciled with the config. Cheap: it
-            // only writes a game option when the value actually differs.
-            RenderTweaks.apply();
-            // Keep Sodium's defer mode in sync with the fast-chunk-loading mode.
-            ChunkLoadingBooster.apply();
-            int fps = client.getCurrentFps();
-            InteliumOverlay.TRACKER.push(fps);
-            AbBenchmark.INSTANCE.tick(System.currentTimeMillis(), fps);
+            // Fail soft: one escaped exception from a tick handler crashes the
+            // whole game, which is exactly the failure mode every Intelium
+            // feature promises to avoid. Log once and stand down instead.
+            try {
+                tick(client);
+            } catch (Throwable t) {
+                if (!tickFailed) {
+                    tickFailed = true;
+                    Intelium.LOGGER.error(
+                            "Intelium: client tick handler failed - disabling Intelium "
+                                    + "for this session instead of crashing", t);
+                    Intelium.IS_ENABLED = false;
+                }
+            }
         });
 
         HudRenderCallback.EVENT.register((context, tickCounter) ->
                 InteliumOverlay.renderHud(context));
+    }
+
+    /** Latched after the first tick-handler failure; logs exactly once. */
+    private static volatile boolean tickFailed;
+
+    private static void tick(net.minecraft.client.MinecraftClient client) {
+        IntelGpuDetector.detectOnce();
+        // A world change ends any A/B run: its OFF half would otherwise measure
+        // the title screen and present the result as a real comparison.
+        if (AbBenchmark.INSTANCE.isRunning() && client.world == null) {
+            AbBenchmark.INSTANCE.cancel(System.currentTimeMillis());
+        }
+        // Feed the adaptive render-distance controller first so the cap it
+        // publishes is applied by RenderTweaks in the same tick.
+        AdaptiveDistance.tick(client);
+        // Recompute the render budgets from the config, the camera and the
+        // current FPS pressure, so this tick's frames read fresh numbers.
+        RenderBudgetDriver.tick(client);
+        // Keep the live render tweaks reconciled with the config. Cheap: it
+        // only writes a game option when the value actually differs.
+        RenderTweaks.apply();
+        // Keep Sodium's defer mode in sync with the fast-chunk-loading mode.
+        ChunkLoadingBooster.apply();
+        int fps = client.getCurrentFps();
+        // Deliberately throttled frames (background/menu FPS caps) are not
+        // stutter: feeding them to the overlay painted a red "1% low" for ten
+        // seconds after every alt-tab, and feeding them to the benchmark let a
+        // mid-run alt-tab poison the comparison.
+        boolean measurable = !RenderTweaks.fpsDeliberatelyThrottled(client);
+        if (measurable) {
+            InteliumOverlay.TRACKER.push(fps);
+        }
+        AbBenchmark.INSTANCE.tick(System.currentTimeMillis(), fps, measurable);
     }
 }
