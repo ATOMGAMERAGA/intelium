@@ -56,7 +56,8 @@ class InteliumStateTest {
     @DisplayName("Public static fields are volatile")
     void publicStaticFieldsAreVolatile() throws NoSuchFieldException {
         for (String name : new String[]{
-                "IS_ENABLED", "IS_COMPATIBLE", "DETECTED_GENERATION", "DISABLED_REASON_KEY"
+                "IS_ENABLED", "IS_COMPATIBLE", "DETECTED_GENERATION", "DETECTED_RENDERER",
+                "DETECTED_BACKEND", "DISABLED_REASON_KEY"
         }) {
             Field f = Intelium.class.getField(name);
             assertTrue(Modifier.isVolatile(f.getModifiers()),

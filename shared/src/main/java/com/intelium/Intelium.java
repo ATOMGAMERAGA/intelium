@@ -30,8 +30,11 @@ public class Intelium implements ClientModInitializer {
 
     public static volatile IntelGpuGeneration DETECTED_GENERATION = IntelGpuGeneration.UNKNOWN;
 
-    /** Raw GL_RENDERER string captured at detection time, for status display. */
+    /** Raw graphics-device name captured at detection time, for status display. */
     public static volatile String DETECTED_RENDERER = "";
+
+    /** Active Blaze3D graphics API; OpenGL on 1.21.11, device-reported on 26.x. */
+    public static volatile RenderBackend DETECTED_BACKEND = RenderBackend.UNKNOWN;
 
     public static volatile String DISABLED_REASON_KEY = null;
 
@@ -54,7 +57,7 @@ public class Intelium implements ClientModInitializer {
         // crash), so there is no hard version gate here.
         SODIUM_OK = true;
         LOGGER.info("Intelium {}: sodium {} detected. GPU detection deferred until the "
-                + "GL context is ready.", version, sodiumVersion());
+                + "graphics device is ready.", version, sodiumVersion());
     }
 
     private static String sodiumVersion() {

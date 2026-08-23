@@ -104,6 +104,7 @@
     "intelium.edit.hint": "Drag the panel to move it. Position saves automatically.",
     "intelium.edit.run": "Run A/B Benchmark",
     "intelium.status.active": "Active — optimizing for %s",
+    "intelium.status.active_backend": "Active — optimizing for %s on %s",
     "intelium.status.unsupported": "GPU '%s' is not supported: %s",
     "intelium.status.pending": "GPU detection pending…",
     "intelium.gpus.title": "Supported Intel GPUs",

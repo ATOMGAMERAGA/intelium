@@ -38,7 +38,8 @@ public abstract class MixinChunkBuilder {
             boolean fastLoad = ChunkLoadingMode
                     .fromKey(InteliumConfigIO.get().chunkLoadingMode).boostsWorkers();
             desired = ChunkBuilderTuner.recommendedWorkers(
-                    Intelium.DETECTED_GENERATION, profile, fastLoad);
+                    Intelium.DETECTED_GENERATION, profile, fastLoad,
+                    Intelium.DETECTED_BACKEND);
         }
         if (desired >= 1) {
             cir.setReturnValue(desired);

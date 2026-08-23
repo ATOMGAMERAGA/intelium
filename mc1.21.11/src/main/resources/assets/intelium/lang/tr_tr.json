@@ -104,6 +104,7 @@
     "intelium.edit.hint": "Paneli sürükleyerek taşı. Konum otomatik kaydedilir.",
     "intelium.edit.run": "A/B Testi Çalıştır",
     "intelium.status.active": "Etkin — %s için optimize ediliyor",
+    "intelium.status.active_backend": "Etkin — %s, %s üzerinde optimize ediliyor",
     "intelium.status.unsupported": "GPU '%s' desteklenmiyor: %s",
     "intelium.status.pending": "GPU algılaması bekleniyor…",
     "intelium.gpus.title": "Desteklenen Intel GPU'lar",

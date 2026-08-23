@@ -64,22 +64,23 @@ class WorkflowFileTest {
     }
 
     @Test
-    @DisplayName("Workflow publishes the fixed 1.3.1 release")
+    @DisplayName("Workflow publishes the fixed 1.3.2 release")
     void usesFixedVersion() {
-        assertTrue(content.contains("1.3.1"), "release version must be 1.3.1");
-        assertTrue(content.contains("v${{ env.INTELIUM_VERSION }}") || content.contains("v1.3.1"),
-                "release must be tagged v1.3.1");
+        assertTrue(content.contains("1.3.2"), "release version must be 1.3.2");
+        assertFalse(content.contains("1.3.1"), "stale 1.3.1 version must not remain");
+        assertTrue(content.contains("v${{ env.INTELIUM_VERSION }}") || content.contains("v1.3.2"),
+                "release must be tagged v1.3.2");
         assertTrue(content.contains("prerelease: false"),
-                "1.3.1 must be a full release, not a prerelease");
+                "1.3.2 must be a full release, not a prerelease");
     }
 
     @Test
     @DisplayName("Release attaches both per-version jars")
     void attachesBothJars() {
-        assertTrue(content.contains("Intelium-v1.3.1-1.21.11.jar")
+        assertTrue(content.contains("Intelium-v1.3.2-1.21.11.jar")
                         || content.contains("-1.21.11.jar"),
                 "must attach the 1.21.11 jar");
-        assertTrue(content.contains("Intelium-v1.3.1-26.x.jar")
+        assertTrue(content.contains("Intelium-v1.3.2-26.x.jar")
                         || content.contains("-26.x.jar"),
                 "must attach the 26.x jar");
     }
@@ -110,5 +111,12 @@ class WorkflowFileTest {
     @DisplayName("Workflow passes -PinteliumVersion to gradle")
     void passesVersion() {
         assertTrue(content.contains("-PinteliumVersion"));
+    }
+
+    @Test
+    @DisplayName("Release attaches checksums for both jars")
+    void attachesChecksums() {
+        assertTrue(content.contains(".sha256"), "must attach SHA-256 checksums");
+        assertTrue(content.contains(".sha512"), "must attach SHA-512 checksums");
     }
 }

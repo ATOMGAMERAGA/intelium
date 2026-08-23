@@ -81,7 +81,14 @@ public final class IntelGpuClassifier {
                 || v.contains("advanced micro devices") || v.contains("radeon")) {
             return new Result(IntelGpuGeneration.UNKNOWN, false, "intelium.disabled.amd");
         }
-        if (!v.contains("intel")) {
+        // Blaze3D's Vulkan device information normally reports a readable
+        // vendor, but drivers are allowed to expose the Intel PCI vendor ID
+        // instead. A missing vendor is also recoverable when the device name
+        // itself explicitly identifies Intel. An explicit different vendor is
+        // never overridden by the renderer text.
+        boolean intelVendor = v.contains("intel") || v.matches(".*\\b(?:0x)?8086\\b.*")
+                || (v.isBlank() && r.contains("intel"));
+        if (!intelVendor) {
             return new Result(IntelGpuGeneration.UNKNOWN, false, "intelium.disabled.unknown_gpu");
         }
 

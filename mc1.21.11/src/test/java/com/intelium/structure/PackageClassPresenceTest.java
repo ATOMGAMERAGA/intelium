@@ -15,6 +15,7 @@ class PackageClassPresenceTest {
             "com.intelium.Intelium",
             "com.intelium.IntelGpuDetector",
             "com.intelium.IntelGpuGeneration",
+            "com.intelium.RenderBackend",
             "com.intelium.SupportedGpus",
             "com.intelium.config.InteliumConfig",
             "com.intelium.config.InteliumConfigIO",
@@ -58,6 +59,7 @@ class PackageClassPresenceTest {
     void generationIsEnum() throws ClassNotFoundException {
         Class<?> c = Class.forName("com.intelium.IntelGpuGeneration");
         assertTrue(c.isEnum());
+        assertTrue(Class.forName("com.intelium.RenderBackend").isEnum());
     }
 
     @Test

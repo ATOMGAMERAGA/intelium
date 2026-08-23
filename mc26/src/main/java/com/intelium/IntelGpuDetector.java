@@ -3,113 +3,156 @@ package com.intelium;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
 
+import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Gathers the host GPU's vendor/renderer strings from the OpenGL context and
- * publishes the {@link IntelGpuClassifier} decision to {@link Intelium}.
+ * Detects the graphics device selected by Minecraft 26.x and publishes the
+ * shared {@link IntelGpuClassifier} decision.
  *
- * <p>On the 26.x line this is subtle: 26.1.x still renders through OpenGL, but
- * 26.2 introduced the Vulkan renderer, and under Vulkan there is <em>no GL
- * context current on the render thread at all</em>. Calling {@code glGetString}
- * there is at best an {@code IllegalStateException} and at worst (with LWJGL's
- * runtime checks disabled) a native crash. So this detector first verifies a
- * context is current via {@link GL#getCapabilities()}, retries for a while in
- * case detection simply ran too early, and if no context ever appears it
- * concludes - honestly - that the GPU cannot be identified on this renderer and
- * stays inactive with a dedicated message, instead of reporting a misleading
- * "unknown GPU vendor".
+ * <p>Minecraft 26.2 can run through Vulkan, where no OpenGL context exists.
+ * Blaze3D already exposes the selected device through {@code DeviceInfo}; that
+ * is the authoritative source because it describes the GPU Minecraft is
+ * actually rendering on (important on hybrid-GPU laptops). Access is reflective
+ * so this one 26.x jar remains fail-soft on 26.1 builds whose device API may
+ * differ. OpenGL's vendor/renderer strings remain a safe fallback for 26.1.
  *
- * <p>The pure classification logic lives in the shared
- * {@link IntelGpuClassifier}; this class is only the version-specific glue that
- * reads {@code glGetString} on the render thread.
+ * <p>Detection retries while the device is still starting, then fails closed:
+ * Intelium never guesses an Intel profile and never touches OpenGL without a
+ * current context.
  */
 public final class IntelGpuDetector {
 
     private static final AtomicBoolean DETECTED = new AtomicBoolean(false);
-
-    /**
-     * How many ticks to keep looking for a current GL context (~5s at 20/s)
-     * before concluding this renderer will never provide one. Under OpenGL the
-     * context exists by the first tick, so this only ever delays the honest
-     * "cannot identify" verdict on the Vulkan renderer.
-     */
     private static final int MAX_ATTEMPTS = 100;
 
-    /** Only ever touched on the render thread (both call sites run there). */
+    /** Only touched by render-thread call sites. */
     private static int attempts;
 
     private IntelGpuDetector() {}
 
-    /**
-     * Runs detection once it can. Both call sites (the first client tick and
-     * the Sodium world-renderer constructor) run on the render thread, so when
-     * a GL context exists it is the current one. Calls after a concluded
-     * detection are no-ops; failed reads retry on later ticks rather than
-     * latching a wrong answer.
-     */
+    /** Runs until a trustworthy device identity is available, then latches. */
     public static void detectOnce() {
         if (DETECTED.get()) return;
-        // Sodium missing / unsupported was already decided at init; do not let
-        // GPU detection overwrite that environment decision.
         if (!Intelium.SODIUM_OK) {
             DETECTED.set(true);
             return;
         }
 
-        String vendor = "";
-        String renderer = "";
-        if (glContextCurrent()) {
-            vendor = safeGetString(GL11.GL_VENDOR);
-            renderer = safeGetString(GL11.GL_RENDERER);
+        DeviceSnapshot device = readBlaze3dDevice();
+        if (!device.hasIdentity() && glContextCurrent()) {
+            device = new DeviceSnapshot(
+                    safeGlString(GL11.GL_VENDOR),
+                    safeGlString(GL11.GL_RENDERER),
+                    "OpenGL",
+                    "");
         }
 
-        if (vendor.isEmpty() && renderer.isEmpty()) {
-            // No context (Vulkan renderer) or an unreadable one. Keep trying -
-            // this may simply be earlier than context creation - and only
-            // conclude once it is clear no GL context is coming.
+        if (!device.hasIdentity()) {
             if (++attempts < MAX_ATTEMPTS) return;
             if (!DETECTED.compareAndSet(false, true)) return;
             Intelium.DETECTED_RENDERER = "";
+            Intelium.DETECTED_BACKEND = RenderBackend.UNKNOWN;
             Intelium.DETECTED_GENERATION = IntelGpuGeneration.UNKNOWN;
             Intelium.IS_COMPATIBLE = false;
-            Intelium.DISABLED_REASON_KEY = "intelium.disabled.no_gl";
-            Intelium.LOGGER.info("Intelium status: no OpenGL context available to identify the "
-                    + "GPU (Vulkan renderer?) - staying inactive on this renderer.");
+            Intelium.DISABLED_REASON_KEY = "intelium.disabled.device_unavailable";
+            Intelium.LOGGER.info("Intelium status: Blaze3D did not expose a usable graphics "
+                    + "device identity - staying inactive instead of guessing.");
             return;
         }
 
         if (!DETECTED.compareAndSet(false, true)) return;
+        IntelGpuClassifier.Result result =
+                IntelGpuClassifier.decide(device.vendor(), device.name());
+        RenderBackend backend = RenderBackend.fromName(device.backend());
 
-        IntelGpuClassifier.Result r = IntelGpuClassifier.decide(vendor, renderer);
-
-        Intelium.DETECTED_RENDERER = renderer;
-        Intelium.DETECTED_GENERATION = r.generation;
-        Intelium.IS_COMPATIBLE = r.compatible;
-        Intelium.DISABLED_REASON_KEY = r.reasonKey;
+        Intelium.DETECTED_RENDERER = device.name();
+        Intelium.DETECTED_BACKEND = backend;
+        Intelium.DETECTED_GENERATION = result.generation;
+        Intelium.IS_COMPATIBLE = result.compatible;
+        Intelium.DISABLED_REASON_KEY = result.reasonKey;
 
         Intelium.LOGGER.info(
-                "Intelium status: gpu='{}' renderer='{}' detected={} active={}{}",
-                vendor, renderer, r.generation.display, r.compatible,
-                r.reasonKey == null ? "" : " (reason=" + r.reasonKey + ")");
+                "Intelium status: vendor='{}' device='{}' backend='{}' driver='{}' "
+                        + "detected={} active={}{}",
+                device.vendor(), device.name(), device.backend(), device.driver(),
+                result.generation.display, result.compatible,
+                result.reasonKey == null ? "" : " (reason=" + result.reasonKey + ")");
     }
 
-    /** Whether a GL context is current on this thread (false under Vulkan). */
+    /**
+     * Reads DeviceInfo without creating a hard binary dependency on its 26.2
+     * shape. Every named method is optional; failure simply allows a later tick
+     * or the OpenGL fallback to try again.
+     */
+    private static DeviceSnapshot readBlaze3dDevice() {
+        try {
+            Class<?> renderSystem = Class.forName(
+                    "com.mojang.blaze3d.systems.RenderSystem", false,
+                    IntelGpuDetector.class.getClassLoader());
+            Method getDevice = renderSystem.getMethod("getDevice");
+            Object device = getDevice.invoke(null);
+            if (device == null) return DeviceSnapshot.EMPTY;
+
+            Class<?> deviceType = getDevice.getReturnType();
+            Method getDeviceInfo = deviceType.getMethod("getDeviceInfo");
+            Object info = getDeviceInfo.invoke(device);
+            if (info == null) return DeviceSnapshot.EMPTY;
+
+            Class<?> infoType = getDeviceInfo.getReturnType();
+            return new DeviceSnapshot(
+                    invokeString(infoType, info, "vendorName"),
+                    invokeString(infoType, info, "name"),
+                    invokeString(infoType, info, "backendName"),
+                    invokeString(infoType, info, "driverInfo"));
+        } catch (Throwable ignored) {
+            return DeviceSnapshot.EMPTY;
+        }
+    }
+
+    private static String invokeString(Class<?> owner, Object target, String methodName) {
+        try {
+            Object value = owner.getMethod(methodName).invoke(target);
+            return value == null ? "" : value.toString().trim();
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
     private static boolean glContextCurrent() {
         try {
             GL.getCapabilities();
             return true;
-        } catch (Throwable t) {
+        } catch (Throwable ignored) {
             return false;
         }
     }
 
-    private static String safeGetString(int name) {
+    private static String safeGlString(int name) {
         try {
-            String s = GL11.glGetString(name);
-            return s == null ? "" : s;
-        } catch (Throwable t) {
+            String value = GL11.glGetString(name);
+            return value == null ? "" : value.trim();
+        } catch (Throwable ignored) {
             return "";
+        }
+    }
+
+    private record DeviceSnapshot(String vendor, String name, String backend, String driver) {
+        private static final DeviceSnapshot EMPTY = new DeviceSnapshot("", "", "", "");
+
+        private DeviceSnapshot {
+            vendor = normalize(vendor);
+            name = normalize(name);
+            backend = normalize(backend);
+            driver = normalize(driver);
+        }
+
+        private boolean hasIdentity() {
+            return !vendor.isEmpty() || !name.isEmpty();
+        }
+
+        private static String normalize(String value) {
+            return value == null ? "" : value.trim();
         }
     }
 }

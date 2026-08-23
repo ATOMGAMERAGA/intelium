@@ -64,6 +64,7 @@ class SourceLayoutTest {
             "Intelium.java",
             "IntelGpuClassifier.java",
             "IntelGpuGeneration.java",
+            "RenderBackend.java",
             "SupportedGpus.java",
             "IntelGpuDetector.java"
     })

@@ -31,18 +31,18 @@ in `src/main/resources/assets/intelium/icon.png`.
 | Area | What Intelium does |
 |---|---|
 | Render Budget Engine | Three optimizations of Intelium's own, inside the render path rather than on top of a vanilla setting. **Smart Entity Culling** skips entities that land on fewer pixels than a threshold — measured from the entity's real size against your resolution and FOV, so a dropped item stops drawing at ~16 blocks while a zombie keeps drawing past 100. **Block Entity Budget** caps how many chests, signs and banners are drawn per frame; they are the one thing Sodium cannot batch into the chunk mesh, which is why a storage room tanks the frame rate. **Particle Burst Limiter** caps particle spawns per tick, cutting the tail of a TNT chain without removing the effect. All three can tighten under FPS pressure and relax on recovery. |
-| Chunk build threading | Overrides Sodium's chunk-build worker count with a generation- and profile-aware value. It scales with your CPU and reserves headroom for the render thread, so chunks keep up while you move (no hitch when new chunks enter view) without starving the frame. Honors a manual override. |
+| Chunk build threading | Overrides Sodium's chunk-build worker count with a generation-, profile-, and backend-aware value. It scales with your CPU and reserves headroom for the render thread; on Vulkan it also leaves room for Blaze3D submission and Sodium's separate asynchronous culling worker. Manual overrides remain exact. |
 | Fast chunk loading | Overrides Sodium's chunk **defer mode** — which ships at the slowest setting (`Always`) — so freshly meshed chunks become visible much sooner, and boosts build throughput. **Fast** = one-frame delay (recommended), **Turbo** = zero-frame (fastest). Self-disables cleanly if a Sodium build moves the setting. |
 | Live render tweaks | Opt-in caps on vanilla settings that cost real per-frame GPU/CPU time on weak iGPUs: entity render distance, particles, entity shadows, biome blending, clouds, graphics mode, smooth lighting, VSync and render distance. Each captures your original value and restores it when turned off — the captured originals are persisted, so the restore works even across a game restart. |
 | Optimization profile | **Max FPS / Balanced / Smooth** — shifts the chunk-worker trade-off toward peak frame rate or toward steady frame times while walking and turning. |
 | Adaptive performance | **Adaptive Render Distance** holds a user-set FPS target by stepping the render distance down when FPS stays low and back up when there is headroom (hysteresis + hold timers, never below half your setting); when FPS collapses far below the target it reacts ~4× faster (halved hold, two chunks per step). **Background FPS Limit** caps the frame rate while the window is unfocused and restores your limit the instant focus returns. **Menu FPS Limit** does the same while a menu is open — frames nobody needs at full rate. |
 | Stutter visibility | The overlay shows the **1% low** and **minimum** FPS over the last few seconds, so you can see hitches, not just the headline average. |
-| GPU detection | Identifies the exact Intel generation from the GL renderer string on Windows drivers, Linux/Mesa, and VirGL virtual GPUs (ChromeOS Crostini / Linux VMs) that pass the host renderer through, and reports support status in-game and in the log. |
+| GPU detection | On 26.2, reads Blaze3D's selected graphics device directly, so Vulkan identifies the GPU without unsafe OpenGL calls and hybrid-GPU laptops are judged by the device Minecraft actually uses. On 1.21.11/26.1 it uses the current OpenGL context. Handles Windows drivers, Linux/Mesa, PCI vendor ID `8086`, and VirGL guests that expose the host renderer. |
 | Honest gating | Disables itself cleanly on NVIDIA / AMD / unrecognized / too-old GPUs. A Mixin config plugin checks each hook's Sodium target at load time, so any compatible Sodium version works and incompatible internals self-disable instead of crashing. |
 
 > **Why these levers and not draw-call batching / persistent buffers?**
-> Sodium 0.8 already issues batched `glMultiDrawElementsIndirect` draws, manages
-> chunk geometry in a GPU memory arena, and performs occlusion culling.
+> Sodium already owns backend-native batching, chunk-geometry memory, and
+> occlusion culling on its supported OpenGL/Vulkan paths.
 > Re-implementing those is redundant and risks regressions, so Intelium does not
 > ship placebo switches. Instead it pulls the levers Sodium leaves to the player
 > — entity distance, particles, shadows, biome blend, worker count — and wires
@@ -60,10 +60,10 @@ contains both; pick the one matching your Minecraft version.
 
 | Jar | Minecraft | Java | Renderer | Sodium |
 |---|---|---|---|---|
-| `Intelium-v1.3.1-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.x |
-| `Intelium-v1.3.1-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.x |
+| `Intelium-v1.3.2-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.13 build target |
+| `Intelium-v1.3.2-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.1 build target |
 
-- Fabric Loader **0.18.3+**
+- Fabric Loader **0.19.0+** (release builds use 0.19.3)
 - Fabric API
 - **Sodium** — any version compatible with your Minecraft. Intelium does not cap
   the Sodium version: if a newer Sodium changes the internals a hook relies on,
@@ -109,8 +109,8 @@ Settings are split across two pages: **General** (core + render tweaks) and
 | Option | Default | Notes |
 |---|---|---|
 | Enable Intelium | `true` | Master switch. Greyed out when the GPU is unsupported. |
-| Optimization Profile | `Balanced` | **Max FPS** favors peak frame rate (fewer workers); **Smooth** favors stable frame times while moving (more workers); **Balanced** is the middle. |
-| Chunk Build Workers | `Auto` | `0` / Auto = generation- and profile-aware default; `1–16` overrides Sodium's worker count directly. |
+| Optimization Profile | `Balanced` | **Max FPS** favors peak frame rate (fewer workers, even when Fast Chunk Loading is active); **Smooth** favors stable frame times while moving (more workers); **Balanced** is the middle. |
+| Chunk Build Workers | `Auto` | `0` / Auto = generation-, profile-, CPU-, and backend-aware default. Vulkan Auto preserves extra CPU headroom for rendering and async culling; `1–16` overrides Sodium's worker count directly. |
 | Fast Chunk Loading | `Fast` | **Off** leaves Sodium's defer mode; **Fast** = one-frame deferral (chunks appear much sooner, minimal cost); **Turbo** = zero-frame (fastest, may cost some smoothness). Also boosts build throughput. |
 
 **General → Render Tweaks** (applied live to vanilla settings; your originals are restored when turned off — even across a restart)
@@ -155,6 +155,11 @@ Settings are split across two pages: **General** (core + render tweaks) and
 
 **Overlay & Test**
 
+This page and its movable benchmark overlay are available in the 1.21.11 jar.
+The 26.x jar keeps the performance controls inside Sodium's settings page but
+does not expose the legacy immediate-mode overlay on Minecraft's retained-mode
+Vulkan UI.
+
 | Option | Default | Notes |
 |---|---|---|
 | FPS Test Overlay | `false` | Toggles the movable on-screen FPS panel. |
@@ -193,7 +198,7 @@ The repo is split by Minecraft line, with shared, version-agnostic logic in
 - `mc1.21.11/` — the 1.21.11 build (Yarn mappings, Loom, Java 21).
 - `mc26/` — the 26.x build (official Mojang mappings, the non-remapping
   `net.fabricmc.fabric-loom` plugin, Java 25).
-- `shared/` — pure logic (GPU classifier, config, optimization math, HUD math,
+- `shared/` — pure logic (GPU/backend classifier, config, optimization math, HUD math,
   mod-compat) compiled into both, with its unit tests.
 
 ```bash

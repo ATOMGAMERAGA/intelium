@@ -1,6 +1,7 @@
 package com.intelium.config;
 
 import com.intelium.Intelium;
+import com.intelium.RenderBackend;
 import com.intelium.client.ChunkLoadingBooster;
 import com.intelium.client.InteliumGame;
 import com.intelium.client.RenderBudgetDriver;
@@ -48,6 +49,11 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
     /** Live status line shown as the tooltip on the interactive options. */
     private static Text statusTooltip() {
         if (Intelium.IS_COMPATIBLE) {
+            if (Intelium.DETECTED_BACKEND != RenderBackend.UNKNOWN) {
+                return Text.translatable("intelium.status.active_backend",
+                        Intelium.DETECTED_GENERATION.display,
+                        Intelium.DETECTED_BACKEND.displayName);
+            }
             return Text.translatable("intelium.status.active", Intelium.DETECTED_GENERATION.display);
         }
         Text reason = Intelium.DISABLED_REASON_KEY == null

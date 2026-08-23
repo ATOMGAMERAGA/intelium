@@ -200,4 +200,28 @@ class DetectionDecisionTest {
         assertTrue(r.compatible);
         assertEquals(IntelGpuGeneration.GEN9_5_KABY_COFFEE, r.generation);
     }
+
+    @Test
+    @DisplayName("Vulkan PCI vendor ID 0x8086 is recognized as Intel")
+    void vulkanIntelPciVendorIdSupported() {
+        IntelGpuClassifier.Result r = decide("0x8086", "Intel(R) Iris(R) Xe Graphics");
+        assertTrue(r.compatible);
+        assertEquals(IntelGpuGeneration.GEN12_XE_LP, r.generation);
+    }
+
+    @Test
+    @DisplayName("Missing Vulkan vendor can use an explicit Intel device name")
+    void missingVendorUsesExplicitIntelDeviceName() {
+        IntelGpuClassifier.Result r = decide("", "Intel(R) UHD Graphics 770");
+        assertTrue(r.compatible);
+        assertEquals(IntelGpuGeneration.GEN12_XE_LP, r.generation);
+    }
+
+    @Test
+    @DisplayName("An explicit non-Intel vendor is never overridden by renderer text")
+    void explicitOtherVendorWins() {
+        IntelGpuClassifier.Result r = decide("Microsoft Corporation", "Intel Translation Layer");
+        assertFalse(r.compatible);
+        assertEquals("intelium.disabled.unknown_gpu", r.reasonKey);
+    }
 }

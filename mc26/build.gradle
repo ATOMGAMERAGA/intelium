@@ -61,7 +61,7 @@ dependencies {
 
     // Full Sodium jar from Modrinth (Intelium mixins touch Sodium internals that
     // the api-only artifact does not ship). gradle.properties holds the full
-    // Modrinth coordinate (e.g. mc26.2-0.9.0-fabric).
+    // Modrinth coordinate (e.g. mc26.2-0.9.1-fabric).
     implementation "maven.modrinth:sodium:${project.sodium_version}"
 
     // Test dependencies

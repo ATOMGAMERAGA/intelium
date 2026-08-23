@@ -147,10 +147,10 @@ class FabricModJsonTest {
     }
 
     @Test
-    @DisplayName("depends.fabricloader specifies version >=0.18.0")
+    @DisplayName("depends.fabricloader specifies version >=0.19.0")
     void fabricloaderDep() {
         String v = json.getAsJsonObject("depends").get("fabricloader").getAsString();
-        assertTrue(v.contains("0.18.0"), "expected 0.18.0 in fabricloader dep, was: " + v);
+        assertTrue(v.contains("0.19.0"), "expected 0.19.0 in fabricloader dep, was: " + v);
     }
 
     @Test

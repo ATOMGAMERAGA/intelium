@@ -1,6 +1,7 @@
 package com.intelium.optimization;
 
 import com.intelium.IntelGpuGeneration;
+import com.intelium.RenderBackend;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -117,6 +118,26 @@ class ChunkBuilderTunerTest {
     }
 
     @Test
+    @DisplayName("Fast loading no longer erases the Max FPS profile")
+    void fastLoadPreservesProfileIntent() {
+        int maxGl = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.MAX_FPS,
+                8, true, RenderBackend.OPENGL);
+        int smoothGl = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.SMOOTH,
+                8, true, RenderBackend.OPENGL);
+        int maxVk = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.MAX_FPS,
+                8, true, RenderBackend.VULKAN);
+        int smoothVk = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.SMOOTH,
+                8, true, RenderBackend.VULKAN);
+
+        assertTrue(maxGl < smoothGl, "OpenGL max=" + maxGl + " smooth=" + smoothGl);
+        assertTrue(maxVk < smoothVk, "Vulkan max=" + maxVk + " smooth=" + smoothVk);
+    }
+
+    @Test
     @DisplayName("null profile is treated as BALANCED, never throws")
     void nullProfileIsBalanced() {
         int n = ChunkBuilderTuner.recommendedWorkers(IntelGpuGeneration.GEN12_XE_LP, null, 8);
@@ -162,5 +183,51 @@ class ChunkBuilderTunerTest {
         // From 3 cores up the usable floor of 2 workers applies again.
         assertEquals(2, ChunkBuilderTuner.recommendedWorkers(
                 IntelGpuGeneration.GEN9_SKYLAKE, OptimizationProfile.MAX_FPS, 3));
+    }
+
+    @Test
+    @DisplayName("Vulkan Auto preserves two logical processors where possible")
+    void vulkanKeepsSubmissionAndCullingHeadroom() {
+        for (int cpu = 1; cpu <= 32; cpu++) {
+            for (IntelGpuGeneration gen : IntelGpuGeneration.values()) {
+                for (OptimizationProfile profile : OptimizationProfile.values()) {
+                    for (boolean fast : new boolean[]{false, true}) {
+                        int workers = ChunkBuilderTuner.recommendedWorkers(
+                                gen, profile, cpu, fast, RenderBackend.VULKAN);
+                        assertTrue(workers >= 1, "worker count must stay positive");
+                        assertTrue(workers <= Math.max(1, cpu - 2),
+                                gen + "/" + profile + "/cpu=" + cpu + "/fast=" + fast
+                                        + " -> " + workers);
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Vulkan never raises the established OpenGL worker count")
+    void vulkanNeverAddsContention() {
+        for (int cpu = 1; cpu <= 32; cpu++) {
+            for (IntelGpuGeneration gen : IntelGpuGeneration.values()) {
+                for (OptimizationProfile profile : OptimizationProfile.values()) {
+                    int gl = ChunkBuilderTuner.recommendedWorkers(
+                            gen, profile, cpu, true, RenderBackend.OPENGL);
+                    int vk = ChunkBuilderTuner.recommendedWorkers(
+                            gen, profile, cpu, true, RenderBackend.VULKAN);
+                    assertTrue(vk <= gl,
+                            gen + "/" + profile + "/cpu=" + cpu + " gl=" + gl + " vk=" + vk);
+                }
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("A null backend keeps the previous automatic policy")
+    void nullBackendIsBackwardCompatible() {
+        int oldPolicy = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.SMOOTH, 8, true);
+        int nullBackend = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.SMOOTH, 8, true, null);
+        assertEquals(oldPolicy, nullBackend);
     }
 }

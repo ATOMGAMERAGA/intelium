@@ -58,11 +58,20 @@ class GradlePropertiesTest {
     }
 
     @Test
-    @DisplayName("loader_version is 0.18.x or later")
+    @DisplayName("loader_version is semantic-version shaped")
     void loaderVersion() {
         String v = props.getProperty("loader_version");
         assertTrue(v.matches("\\d+\\.\\d+\\.\\d+.*"),
                 "loader_version must look like semver, was: " + v);
+    }
+
+    @Test
+    @DisplayName("1.3.2 pins the verified stable dependency baseline")
+    void stableReleaseBaseline() {
+        assertEquals("1.3.2", props.getProperty("mod_version"));
+        assertEquals("0.19.3", props.getProperty("loader_version"));
+        assertEquals("0.141.6+1.21.11", props.getProperty("fabric_version"));
+        assertEquals("0.8.13+mc1.21.11", props.getProperty("sodium_version"));
     }
 
     @Test

@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INTELIUM_VERSION: "1.3.1"
+  INTELIUM_VERSION: "1.3.2"
 
 jobs:
   build:
@@ -36,11 +36,11 @@ jobs:
           - target: mc1.21.11
             java: '21'
             label: '1.21.11'
-            jarname: 'Intelium-v1.3.1-1.21.11.jar'
+            jarname: 'Intelium-v1.3.2-1.21.11.jar'
           - target: mc26
             java: '25'
             label: '26.x'
-            jarname: 'Intelium-v1.3.1-26.x.jar'
+            jarname: 'Intelium-v1.3.2-26.x.jar'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,6 +57,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Verify release version is synchronized
+        run: grep -Eq "^mod_version = ${INTELIUM_VERSION}$" "${{ matrix.target }}/gradle.properties"
+
       - name: Make gradlew executable
         run: chmod +x ./${{ matrix.target }}/gradlew
 
@@ -66,13 +69,17 @@ jobs:
             -PinteliumVersion="${INTELIUM_VERSION}" \
             --no-daemon --stacktrace
 
-      - name: Collect the mod jar
+      - name: Collect jar and checksums
         run: |
           mkdir -p dist
-          SRC=$(ls ${{ matrix.target }}/build/libs/intelium-*.jar | grep -v sources | head -1)
-          echo "Built: $SRC"
+          SRC=$(find "${{ matrix.target }}/build/libs" -maxdepth 1 -type f \
+            -name 'intelium-*.jar' ! -name '*-sources.jar' -print -quit)
+          test -n "$SRC"
           cp "$SRC" "dist/${{ matrix.jarname }}"
-          ls -la dist/
+          cd dist
+          sha256sum "${{ matrix.jarname }}" > "${{ matrix.jarname }}.sha256"
+          sha512sum "${{ matrix.jarname }}" > "${{ matrix.jarname }}.sha512"
+          ls -la
 
       - name: Upload test reports
         uses: actions/upload-artifact@v4
@@ -82,22 +89,22 @@ jobs:
           path: ${{ matrix.target }}/build/reports/tests/test/
           retention-days: 14
 
-      - name: Upload jar artifact
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: jar-${{ matrix.target }}
-          path: dist/${{ matrix.jarname }}
+          path: dist/${{ matrix.jarname }}*
           retention-days: 90
 
   release:
     name: Publish release
     needs: build
     runs-on: ubuntu-latest
-    # Only publish from main or a version tag. Pushes to claude/** branches still
-    # run the build job above (real-environment validation) but do NOT release.
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    if: >-
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) &&
+      (github.event_name != 'workflow_dispatch' || inputs.release == 'true')
     steps:
-      - name: Download all jar artifacts
+      - name: Download all release artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: jar-*
@@ -122,6 +129,8 @@ jobs:
             | `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` | 1.21.11 | 21 |
             | `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 |
 
+            SHA-256 and SHA-512 checksum files are attached beside each jar.
+
             Made by **ATOMLAND Studios** · <https://modrinth.com/mod/intelium-mod>
 
             ---
@@ -131,71 +140,67 @@ jobs:
             ````markdown
             ## English
 
-            **Intelium 1.3.1 — the stabilization release.** No new levers this time: every feature that shipped in 1.3.0 got audited end to end, and this release fixes what the audit found — wrong GPU verdicts, an adaptive render distance that could get stuck or over-react, measurement poisoned by alt-tabs, and several ways a future Minecraft/Sodium change could have crashed the game instead of degrading gracefully. Supports Minecraft **1.21.11** and the **26.x** line.
+            **Intelium 1.3.2 — native Vulkan activation and a polished 1.21.11 stable update.** This release fixes the largest remaining 26.x limitation: supported Intel GPUs are now detected and optimized while Minecraft 26.2 is using its Vulkan renderer. It also retunes automatic chunk workers for steadier Vulkan frame pacing and refreshes both build targets to current stable Sodium/Fabric baselines. No experimental renderer replacement or unsafe driver trick is added.
 
-            ### Fixed — GPU detection tells the truth on more machines
+            ### 26.x / Vulkan
 
-            - **"Intel Corporation" is Intel.** The AMD check matched the letters "ati" inside "Corpor-ati-on", so a driver reporting the vendor as "Intel Corporation" had Intelium refusing a fully supported Intel GPU with an "AMD detected" message. Word-boundary matching fixes it (and "Microsoft Corporation" / WARP now reads as unknown, not AMD).
-            - **Workstation Xeon iGPUs are supported.** HD Graphics P530, Iris Pro P580 (Gen 9) and HD/UHD Graphics P630 (Gen 9.5) fell through to the "too old" rule. They are the same silicon as their consumer twins and are now classified as such.
-            - **"Xeon" is not "Xe".** A CPU model embedded in the renderer string ("... (Xeon E3-1505M)") force-classified any iGPU as Gen 12 and handed it a Gen 12 worker budget. The Xe keyword now matches as a whole word only; a bare "Xe2" string is also recognised.
-            - **Vulkan (26.2) is handled honestly.** The 26.x build used to read the GPU through OpenGL calls unconditionally; under the Vulkan renderer there is no GL context, so detection silently failed with a misleading "unknown GPU vendor" — with a native-crash risk if LWJGL's runtime checks were off. Intelium now verifies a GL context exists before touching GL, retries briefly, and otherwise reports plainly that the GPU cannot be identified under Vulkan and stays inactive. No silent wrong answers, no crash path.
+            - **Intelium now activates on supported Intel GPUs under Vulkan.** The previous 26.x detector depended on an OpenGL context; Vulkan has none, so Intelium eventually disabled every optimization. Version 1.3.2 reads Blaze3D's selected `DeviceInfo` instead: vendor, device name, backend and driver are obtained from the graphics device Minecraft is actually using.
+            - **Hybrid-GPU decisions are safer.** Detection follows the selected Blaze3D device, not an assumed integrated GPU. If Minecraft selected NVIDIA/AMD, or the identity is missing/unrecognized, Intelium still fails closed and Sodium runs unmodified.
+            - **26.1 remains fail-soft.** The new device probe is reflection-isolated for cross-version safety. If an older 26.x device API is unavailable, Intelium falls back to guarded OpenGL detection and never calls OpenGL without a current context.
+            - **Vulkan-aware `Auto` chunk workers.** Sodium 0.9 runs asynchronous graph culling on its own executor. On Vulkan, Intelium now keeps two logical processors available where possible for the render/main path, Blaze3D submission and culling instead of letting Fast Chunk Loading consume all but one. This targets smoother chunk-streaming frame times, especially on 4–8-thread Intel laptops. A manual `1–16` worker value is still honored exactly.
+            - **Current stable 26.2 baseline.** The build target moves to Fabric Loader 0.19.3, Fabric API 0.158.0 and Sodium 0.9.1. Sodium 0.9.1 includes upstream fixes for unsafe async-culling concurrency, Vulkan indirect-buffer sizing, several crashes and avoidable per-frame work.
 
-            ### Fixed — Adaptive Render Distance edge cases
+            ### Minecraft 1.21.11 polish
 
-            - **Pinned at the target no longer means stuck forever.** With VSync or an FPS cap at your target (60 on a 60 Hz display), the "step back up" threshold (115% of target) was unreachable — one dip and the reduced distance survived to the end of the session on a machine holding its target perfectly. Sitting at the target now counts as (weaker) evidence of headroom: recovery happens on a doubled hold, still honouring the failure backoff.
-            - **Severe drops no longer cascade to the floor.** A two-chunk severe step now needs a full hold spent in the severe band itself, and is followed by a short settle window — so the rebuild churn of one step no longer reads as "still low" and feeds the next, shedding half your world for one bad moment.
-            - **The A/B benchmark no longer wipes the reduction.** The benchmark toggles Intelium itself; the controller read that as "feature turned off", dropped its reduction mid-run (a full chunk re-load, skewing the very measurement in progress) and re-reduced from scratch afterwards. The benchmark is now checked first and the reduction is held through it.
-            - **Refocus taint skipped.** The FPS counter is a trailing ~1s average, so the first second after an alt-tab or menu-close still reflects the throttled frames; the controller (and the render-budget pressure signal) now let those age out before measuring again.
+            - Updated the stable build baseline to Fabric Loader 0.19.3, Fabric API 0.141.6 and Sodium 0.8.13.
+            - GPU detection no longer commits to an empty/unknown result if its first render-thread call happens before the OpenGL context is readable; it retries briefly, then still fails closed if no trustworthy identity appears.
+            - Sodium 0.8.13 brings its upstream crash, block/fluid tint and compatibility corrections into the tested 1.21.11 baseline.
 
-            ### Fixed — the menu FPS limit respects gameplay screens
+            ### Stability and release quality
 
-            Pressing T to chat is not "opening a menu": the menu cap used to throttle the chat screen, the death screen and every other screen the world is fully visible behind — 10–20 FPS mid-combat. The cap now only engages for screens that hide gameplay (the ones that would pause a singleplayer game). On 26.x the reflective screen probe was hardened too: it prefers the real `screen` member by name, refuses factory methods it used to be able to bind (allocating a screen every tick), and checks the pause behaviour of whatever it finds.
+            - **Fast Chunk Loading now respects the selected profile.** Its worker boost previously pushed `Max FPS` toward the same `cpu - 1` target as `Smooth`, undermining the profile whenever the default Fast mode was enabled. `Max FPS` now receives only a bounded one-worker boost and preserves render-thread headroom; Balanced/Smooth keep their higher streaming throughput.
+            - Backend detection and Vulkan worker policy live in shared, deterministic logic with regression coverage for Vulkan/OpenGL labels, Intel PCI vendor ID `8086`, blank device vendors, explicit non-Intel vendors, CPU bounds and manual-override behavior.
+            - The selected backend is shown in Intelium's live Sodium settings status and written to the log with the device/driver identity for easier troubleshooting.
+            - Every compatibility decision remains conservative: unknown future backends or GPU models are never assigned a guessed tuning profile.
+            - Release jars now ship with SHA-256 and SHA-512 checksum files.
 
-            ### Fixed — smaller but real
-
-            - **Graphics preset lever:** turning the lever (or Intelium) off no longer stomps a hand-tuned CUSTOM mix back to the captured preset — the same respect the lever already showed while on.
-            - **Overlay edit mode (1.21.11):** opening the editor no longer force-enables the overlay permanently; your own Off comes back when you close it. A stale overlay position from a bigger monitor now clamps back on-screen. The benchmark can no longer start from the title screen, cancels when you disconnect mid-run, and unfocused/menu-capped frames no longer poison a running measurement or paint a red "1% low" for ten seconds after every alt-tab.
-            - **Config self-healing:** unreadable keyed values (profile, clouds, fast chunks) are now rewritten to what the mod actually does instead of lying in the file forever; an unreadable fast-chunks value falls back to Off, never to an active override. A hand-edited render-distance cap of 1 now reads as "off" instead of collapsing the world to 2 chunks. The FPS target slider now reaches 144, matching what the config file accepts.
-            - **Fail-soft everywhere:** the whole per-tick driver is wrapped — an unexpected error now logs once and disables Intelium for the session instead of crashing the game. The 26.x menu-blur accessor survives the option changing its value type. When Sodium's internals move and the fast-chunk lever self-disables, a pending original defer mode is now reported instead of silently stranded.
-            - **Engine internals:** the Render Budget Engine's per-tick state is now published atomically (no torn reads if the render path ever leaves the client thread), and dual-core machines no longer hand every core to chunk building — the render thread keeps one, as every profile promises.
-
-            Two jars: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) or `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Full Türkçe and English localisation. Verified compatible with GPUTape, AsyncParticles, Dynamic FPS and FPS Reducer.
+            Two jars: `Intelium-v1.3.2-1.21.11.jar` (Java 21) or `Intelium-v1.3.2-26.x.jar` (Java 25). Full Türkçe and English localisation. Minecraft's Vulkan renderer is still experimental; Intelium improves its integration without claiming that every driver is equally stable or that every scene gains the same FPS.
 
             ## Türkçe (Turkish)
 
-            **Intelium 1.3.1 — stabilizasyon sürümü.** Bu kez yeni bir kol yok: 1.3.0 ile gelen her özellik uçtan uca denetlendi ve bu sürüm o denetimin bulduklarını düzeltiyor — yanlış GPU kararları, takılıp kalabilen ya da aşırı tepki verebilen uyarlanabilir görüş mesafesi, alt-tab'ların zehirlediği ölçümler ve ileride bir Minecraft/Sodium değişikliğinin oyunu zarifçe yavaşlatmak yerine çökertebileceği birkaç yol. Minecraft **1.21.11** ve **26.x** serisi desteklenir.
+            **Intelium 1.3.2 — yerel Vulkan etkinleştirmesi ve daha işlenmiş kararlı 1.21.11 güncellemesi.** Bu sürüm 26.x'in kalan en büyük kısıtını düzeltiyor: desteklenen Intel GPU'lar artık Minecraft 26.2 Vulkan işleyicisini kullanırken algılanıp optimize ediliyor. Otomatik chunk işçileri daha düzenli Vulkan kare süreleri için yeniden ayarlandı; iki derleme hedefi de güncel kararlı Sodium/Fabric tabanlarına taşındı. Deneysel bir işleyici değişimi veya güvensiz sürücü hilesi eklenmedi.
 
-            ### Düzeltildi — GPU tespiti daha çok makinede doğruyu söylüyor
+            ### 26.x / Vulkan
 
-            - **"Intel Corporation" Intel'dir.** AMD denetimi "Corpor-ati-on" içindeki "ati" harflerini yakalıyordu; üreticiyi "Intel Corporation" olarak bildiren bir sürücüde Intelium, tam desteklenen bir Intel GPU'yu "AMD tespit edildi" mesajıyla reddediyordu. Kelime sınırı eşleşmesiyle düzeltildi ("Microsoft Corporation" / WARP da artık AMD değil, bilinmeyen olarak okunuyor).
-            - **İş istasyonu Xeon iGPU'ları destekleniyor.** HD Graphics P530, Iris Pro P580 (Gen 9) ve HD/UHD Graphics P630 (Gen 9.5) "çok eski" kuralına düşüyordu. Tüketici ikizleriyle aynı silikonlar ve artık öyle sınıflandırılıyorlar.
-            - **"Xeon", "Xe" değildir.** Renderer metnine gömülü bir işlemci modeli ("... (Xeon E3-1505M)") herhangi bir iGPU'yu zorla Gen 12 sayıp ona Gen 12 işçi bütçesi veriyordu. Xe anahtar kelimesi artık yalnızca tam kelime olarak eşleşiyor; sade "Xe2" ifadesi de tanınıyor.
-            - **Vulkan (26.2) dürüstçe ele alınıyor.** 26.x derlemesi GPU'yu koşulsuz olarak OpenGL çağrılarıyla okuyordu; Vulkan işleyicisinde GL bağlamı yok, bu yüzden tespit sessizce başarısız olup yanıltıcı bir "bilinmeyen GPU üreticisi" gösteriyordu — LWJGL'in çalışma zamanı denetimleri kapalıysa native çökme riskiyle birlikte. Intelium artık GL'e dokunmadan önce bağlamın varlığını doğruluyor, kısa süre yeniden deniyor ve olmuyorsa GPU'nun Vulkan altında tanımlanamadığını açıkça söyleyip güvenle devre dışı kalıyor.
+            - **Intelium artık desteklenen Intel GPU'larda Vulkan altında etkinleşiyor.** Önceki 26.x algılayıcısı OpenGL bağlamına bağlıydı; Vulkan'da böyle bir bağlam olmadığı için Intelium sonunda bütün optimizasyonları kapatıyordu. 1.3.2 bunun yerine Blaze3D'nin seçili `DeviceInfo` bilgisini okuyor: üretici, aygıt adı, backend ve sürücü bilgisi doğrudan Minecraft'ın gerçekten kullandığı grafik aygıtından alınıyor.
+            - **Çift GPU'lu sistemlerde karar daha güvenli.** Algılama varsayılan olarak dahili GPU'yu kabul etmek yerine seçili Blaze3D aygıtını izliyor. Minecraft NVIDIA/AMD'yi seçtiyse veya kimlik eksik/tanınmıyorsa Intelium yine güvenle devre dışı kalıyor ve Sodium değiştirilmeden çalışıyor.
+            - **26.1 yumuşak hata davranışını koruyor.** Yeni aygıt sondası sürümler arası güvenlik için yansıma ile yalıtıldı. Eski bir 26.x aygıt API'si yoksa korumalı OpenGL algılamasına geri dönüyor ve geçerli bağlam olmadan OpenGL çağrısı yapmıyor.
+            - **Vulkan'a duyarlı `Otomatik` chunk işçileri.** Sodium 0.9 asenkron grafik culling işini ayrı bir executor üzerinde çalıştırıyor. Intelium Vulkan'da, Hızlı Chunk Yükleme'nin biri hariç tüm mantıksal işlemcileri kaplaması yerine mümkün olduğunda render/main yolu, Blaze3D gönderimi ve culling için iki mantıksal işlemci bırakıyor. Bu özellikle 4–8 thread'li Intel dizüstülerde chunk akışı sırasındaki kare sürelerini daha düzenli tutmayı hedefliyor. Elle girilen `1–16` işçi değeri aynen uygulanmaya devam ediyor.
+            - **Güncel kararlı 26.2 tabanı.** Derleme hedefi Fabric Loader 0.19.3, Fabric API 0.158.0 ve Sodium 0.9.1'e taşındı. Sodium 0.9.1; güvensiz async-culling eşzamanlılığı, Vulkan dolaylı buffer boyutlandırması, çeşitli çökmeler ve gereksiz kare başı işler için upstream düzeltmeler içeriyor.
 
-            ### Düzeltildi — Uyarlanabilir Görüş Mesafesi uç durumları
+            ### Minecraft 1.21.11 cilası
 
-            - **Hedefe sabitlenmek artık sonsuza dek takılı kalmak değil.** VSync ya da hedefinle aynı FPS sınırıyla (60 Hz ekranda 60), "yukarı adımla" eşiği (hedefin %115'i) ulaşılmazdı — tek bir düşüş, hedefini kusursuz tutturan bir makinede azaltılmış mesafenin oturum sonuna dek kalması demekti. Hedefte oturmak artık (daha zayıf) bir imkân kanıtı sayılıyor: toparlanma iki katı beklemeyle geliyor ve başarısızlık geri çekilmesine saygı duymaya devam ediyor.
-            - **Şiddetli düşüşler artık tabana kadar zincirleme inmiyor.** İki chunk'lık şiddetli adım artık şiddetli bantta geçirilmiş tam bir bekleme istiyor ve ardından kısa bir oturma penceresi geliyor — böylece bir adımın yeniden inşa gürültüsü "hâlâ düşük" olarak okunup bir sonrakini beslemiyor ve tek kötü an için dünyanın yarısı elden gitmiyor.
-            - **A/B testi artık azaltımı silmiyor.** Test Intelium'u kendisi açıp kapatır; denetleyici bunu "özellik kapatıldı" olarak okuyor, azaltımını testin ortasında bırakıyor (tam bir chunk yeniden yüklemesi — tam da ölçülen şeyi çarpıtan) ve sonrasında sıfırdan yeniden düşürüyordu. Test artık önce denetleniyor ve azaltım boyunca korunuyor.
-            - **Odak dönüşü kirliliği atlanıyor.** FPS sayacı ~1 saniyelik gecikmeli bir ortalamadır; alt-tab ya da menü kapanışından sonraki ilk saniye hâlâ kısılmış kareleri yansıtır. Denetleyici (ve render bütçesi baskı sinyali) artık ölçmeye dönmeden önce bunların eskimesini bekliyor.
+            - Kararlı derleme tabanı Fabric Loader 0.19.3, Fabric API 0.141.6 ve Sodium 0.8.13'e güncellendi.
+            - GPU algılama, ilk render-thread çağrısı OpenGL bağlamı okunabilir olmadan gerçekleşirse artık boş/bilinmeyen sonucu kalıcılaştırmıyor; kısa süre yeniden deniyor ve güvenilir kimlik hiç gelmezse yine güvenle devre dışı kalıyor.
+            - Sodium 0.8.13'ün upstream çökme, blok/sıvı renk tonu ve uyumluluk düzeltmeleri test edilen 1.21.11 tabanına alındı.
 
-            ### Düzeltildi — menü FPS sınırı oyun ekranlarına saygılı
+            ### Kararlılık ve sürüm kalitesi
 
-            Sohbet için T'ye basmak "menü açmak" değildir: menü sınırı sohbet ekranını, ölüm ekranını ve dünyanın tamamen görünür olduğu diğer tüm ekranları kısıyordu — çatışmanın ortasında 10–20 FPS. Sınır artık yalnızca oyunu gizleyen (tek oyunculuda oyunu duraklatacak) ekranlarda devreye giriyor. 26.x'teki yansımalı ekran sondası da sıkılaştırıldı: gerçek `screen` üyesini adıyla tercih ediyor, eskiden bağlanabildiği fabrika metotlarını (her tick yeni ekran üretebilen) reddediyor ve bulduğunun duraklatma davranışını denetliyor.
+            - **Hızlı Chunk Yükleme artık seçilen profile saygı duyuyor.** İşçi artışı daha önce varsayılan Hızlı mod açıkken `Maksimum FPS` profilini `Akıcı` ile aynı `cpu - 1` hedefine yaklaştırıp profilin amacını bozuyordu. `Maksimum FPS` artık yalnızca sınırlandırılmış tek işçi artışı alıyor ve render-thread payını koruyor; Dengeli/Akıcı daha yüksek chunk akış verimini sürdürüyor.
+            - Backend algılama ve Vulkan işçi politikası; Vulkan/OpenGL etiketleri, Intel PCI üretici kimliği `8086`, boş aygıt üreticisi, açık non-Intel üreticiler, CPU sınırları ve manuel geçersiz kılma davranışı için regresyon testleri olan ortak ve deterministik mantıkta tutuluyor.
+            - Seçili backend Intelium'un Sodium ayarlarındaki canlı durumunda gösteriliyor; aygıt/sürücü kimliğiyle birlikte sorun gidermeyi kolaylaştırmak için günlüğe yazılıyor.
+            - Her uyumluluk kararı temkinli kalıyor: bilinmeyen gelecekteki backend'lere veya GPU modellerine tahmini profil atanmıyor.
+            - Sürüm jar'ları artık SHA-256 ve SHA-512 sağlama dosyalarıyla geliyor.
 
-            ### Düzeltildi — küçük ama gerçek
-
-            - **Grafik ön ayarı kolu:** kolu (ya da Intelium'u) kapatmak, elle ayarlanmış bir CUSTOM karışımını artık yakalanan ön ayara geri ezmiyor — kolun açıkken zaten gösterdiği saygının aynısı.
-            - **Panel düzenleme modu (1.21.11):** düzenleyiciyi açmak paneli artık kalıcı olarak açık bırakmıyor; kapattığında kendi Kapalı ayarın geri geliyor. Daha büyük bir monitörden kalan panel konumu artık ekrana geri kıstırılıyor. Test artık ana menüden başlatılamıyor, bağlantı kesilirse iptal oluyor ve odaksız/menü-kısıtlı kareler ne süren bir ölçümü zehirliyor ne de her alt-tab'dan sonra on saniye kırmızı "1% low" boyuyor.
-            - **Yapılandırma kendini onarıyor:** okunamayan anahtarlı değerler (profil, bulutlar, hızlı chunk) artık dosyada sonsuza dek yalan söylemek yerine modun gerçekte yaptığına yeniden yazılıyor; okunamayan bir hızlı-chunk değeri asla etkin bir geçersiz kılmaya değil, Kapalı'ya düşüyor. Elle yazılmış 1 chunk'lık görüş mesafesi sınırı, dünyayı 2 chunk'a indirmek yerine "kapalı" okunuyor. FPS hedefi kaydırıcısı artık yapılandırma dosyasının kabul ettiği 144'e kadar çıkıyor.
-            - **Her yerde yumuşak hata:** tick başına çalışan sürücünün tamamı sarmalandı — beklenmedik bir hata artık oyunu çökertmek yerine bir kez günlüğe yazıp Intelium'u o oturum için devre dışı bırakıyor. 26.x menü bulanıklığı erişimcisi, seçeneğin değer tipini değiştirmesini kaldırıyor. Sodium'un iç yapıları taşınıp hızlı-chunk kolu kendini kapattığında, bekleyen orijinal defer modu artık sessizce ortada bırakılmak yerine bildiriliyor.
-            - **Motor içi:** Render Bütçe Motoru'nun tick başına durumu artık atomik yayınlanıyor (render yolu istemci iş parçacığından ayrılırsa bile yarım okuma imkânsız) ve çift çekirdekli makineler artık her çekirdeği chunk inşasına vermiyor — her profilin söz verdiği gibi render iş parçacığına bir çekirdek kalıyor.
-
-            İki jar: `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` (Java 21) ya da `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` (Java 25). Tam Türkçe ve İngilizce yerelleştirme. GPUTape, AsyncParticles, Dynamic FPS ve FPS Reducer ile uyumluluğu doğrulandı.
+            İki jar: `Intelium-v1.3.2-1.21.11.jar` (Java 21) veya `Intelium-v1.3.2-26.x.jar` (Java 25). Tam Türkçe ve İngilizce yerelleştirme. Minecraft'ın Vulkan işleyicisi hâlâ deneyseldir; Intelium entegrasyonunu geliştirir ancak her sürücünün eşit derecede kararlı veya her sahnenin aynı FPS kazancına sahip olduğunu iddia etmez.
             ````
           files: |
             dist/Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar
+            dist/Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar.sha256
+            dist/Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar.sha512
             dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar
+            dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar.sha256
+            dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar.sha512
           draft: false
           prerelease: false
           generate_release_notes: false
