@@ -29,9 +29,10 @@ public class InteliumConfig {
     /**
      * Fast chunk loading: {@code "off"}, {@code "fast"} or {@code "turbo"}.
      * Overrides Sodium's defer mode so freshly meshed chunks appear sooner, and
-     * boosts chunk-build throughput. {@code "fast"} (one-frame deferral) is the
-     * default; {@code "turbo"} (zero-frame) is the fastest but may cost some
-     * smoothness. See {@code ChunkLoadingMode}.
+     * boosts chunk-build throughput. {@code "fast"} (normally one-frame
+     * deferral, adaptively protected on OpenGL) is the default; {@code "turbo"}
+     * (zero-frame) is the fastest but may cost some smoothness. See
+     * {@code ChunkLoadingMode}.
      */
     public String chunkLoadingMode = "fast";
 

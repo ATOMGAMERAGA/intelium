@@ -29,11 +29,13 @@ import com.intelium.RenderBackend;
  * they can usefully feed, while letting Arc / Xe2 use more. Pure logic with no
  * Minecraft dependency, so it is exhaustively unit-tested.
  *
- * <p>Minecraft 26.2's Vulkan path also runs Sodium's asynchronous graph culling
- * on a dedicated executor. In automatic mode we therefore preserve one extra
- * logical processor on smaller CPUs instead of letting fast chunk loading
- * occupy every processor but one. This is a frame-pacing guard: manual worker
- * overrides remain manual, and OpenGL keeps the established policy.
+ * <p>Backend scheduling matters as well. Minecraft 26.2's Vulkan path runs
+ * Sodium's asynchronous graph culling on a dedicated executor, while OpenGL
+ * performs driver work and completed-mesh uploads on the render path. Automatic
+ * mode therefore preserves two logical processors on both backends for Max FPS
+ * and Balanced; OpenGL Smooth may deliberately use one more worker because that
+ * profile explicitly prioritises streaming throughput. Manual overrides remain
+ * exact.
  */
 public final class ChunkBuilderTuner {
 
@@ -136,6 +138,16 @@ public final class ChunkBuilderTuner {
             // Auto because manual values bypass this tuner in the mixin.
             int vulkanCeiling = Math.max(1, cpu - 2);
             target = Math.min(target, vulkanCeiling);
+        } else if (backend == RenderBackend.OPENGL
+                && fastLoad && profile != OptimizationProfile.SMOOTH) {
+            // Mesh uploads and a meaningful share of Intel OpenGL driver work
+            // land on the render path. The old default Fast+Balanced policy
+            // used cpu-1 workers, leaving only one logical processor for game,
+            // driver and uploads; chunk arrival was quick but its frame-time
+            // spikes were needlessly harsh. Smooth remains the explicit
+            // throughput choice and is allowed to keep cpu-1.
+            int openGlCeiling = Math.max(1, cpu - 2);
+            target = Math.min(target, openGlCeiling);
         }
 
         return clamp(1, Math.min(target, ceiling), cpu);

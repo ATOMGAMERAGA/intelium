@@ -47,6 +47,15 @@ class FpsTrackerTest {
     }
 
     @Test
+    @DisplayName("Running average stays correct through repeated ring-buffer wraps")
+    void repeatedWrapsKeepAverageCorrect() {
+        FpsTracker t = new FpsTracker(3);
+        for (int fps = 1; fps <= 30; fps++) t.push(fps);
+        assertEquals(29, t.smoothed()); // {28, 29, 30}
+        assertEquals(28, t.min());
+    }
+
+    @Test
     @DisplayName("Negative FPS is clamped to zero")
     void negativeClamped() {
         FpsTracker t = new FpsTracker(2);
@@ -91,6 +100,20 @@ class FpsTrackerTest {
     }
 
     @Test
+    @DisplayName("Cached low metrics invalidate when a sample replaces the old minimum")
+    void lowMetricsInvalidateOnPush() {
+        FpsTracker t = new FpsTracker(2);
+        t.push(10);
+        t.push(100);
+        assertEquals(10, t.min());
+        assertEquals(10, t.onePercentLow());
+
+        t.push(80); // replaces 10
+        assertEquals(80, t.min());
+        assertEquals(80, t.onePercentLow());
+    }
+
+    @Test
     @DisplayName("onePercentLow of empty tracker is 0")
     void onePercentLowEmpty() {
         assertEquals(0, new FpsTracker(200).onePercentLow());
@@ -104,5 +127,18 @@ class FpsTrackerTest {
         t.push(20);
         // fraction tiny -> ceil(2 * 1e-9) = 1 -> just the single worst frame
         assertEquals(20, t.lowAverage(1e-9));
+    }
+
+    @Test
+    @DisplayName("Invalid low-average fractions are bounded instead of indexing outside the ring")
+    void lowAverageBoundsInvalidFractions() {
+        FpsTracker t = new FpsTracker(4);
+        t.push(10);
+        t.push(20);
+        t.push(30);
+        assertEquals(20, t.lowAverage(2.0));
+        assertEquals(10, t.lowAverage(-1.0));
+        assertEquals(10, t.lowAverage(Double.NaN));
+        assertEquals(10, t.lowAverage(Double.POSITIVE_INFINITY));
     }
 }

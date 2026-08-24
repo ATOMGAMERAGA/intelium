@@ -1,5 +1,6 @@
 package com.intelium.optimization;
 
+import com.intelium.RenderBackend;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -220,6 +221,20 @@ class RenderBudgetTest {
     }
 
     @Test
+    @DisplayName("Combined particle hot path has the same allowance semantics")
+    void combinedParticleHotPath() {
+        engage(CullingStrength.BALANCED);
+        int limit = RenderBudget.effectiveParticleLimit();
+        for (int i = 0; i < limit; i++) assertFalse(RenderBudget.shouldRejectParticle());
+        assertTrue(RenderBudget.shouldRejectParticle());
+
+        RenderBudget.beginTick();
+        assertFalse(RenderBudget.shouldRejectParticle());
+        RenderBudget.disable();
+        for (int i = 0; i < limit * 2; i++) assertFalse(RenderBudget.shouldRejectParticle());
+    }
+
+    @Test
     @DisplayName("The particle allowance refills every tick")
     void particleBudgetRefills() {
         engage(CullingStrength.BALANCED);
@@ -276,6 +291,31 @@ class RenderBudgetTest {
     @DisplayName("Adaptive tightening never switches a system that is OFF on")
     void adaptiveNeverEnablesAnOffSystem() {
         engage(CullingStrength.OFF, CullingStrength.OFF, CullingStrength.OFF, true, 1.0);
+        assertEquals(0.0, RenderBudget.effectiveEntityMinPixels());
+        assertEquals(0, RenderBudget.effectiveBlockEntityLimit());
+        assertEquals(0, RenderBudget.effectiveParticleLimit());
+    }
+
+    @Test
+    @DisplayName("OpenGL tightens only enabled budgets and leaves Vulkan unchanged")
+    void backendAwareBudget() {
+        RenderBudget.update(true, HEIGHT, FOV,
+                CullingStrength.BALANCED, CullingStrength.BALANCED,
+                CullingStrength.BALANCED, false, 0.0, RenderBackend.VULKAN);
+        double vulkanPixels = RenderBudget.effectiveEntityMinPixels();
+        int vulkanBlockEntities = RenderBudget.effectiveBlockEntityLimit();
+        int vulkanParticles = RenderBudget.effectiveParticleLimit();
+
+        RenderBudget.update(true, HEIGHT, FOV,
+                CullingStrength.BALANCED, CullingStrength.BALANCED,
+                CullingStrength.BALANCED, false, 0.0, RenderBackend.OPENGL);
+        assertTrue(RenderBudget.effectiveEntityMinPixels() > vulkanPixels);
+        assertTrue(RenderBudget.effectiveBlockEntityLimit() < vulkanBlockEntities);
+        assertTrue(RenderBudget.effectiveParticleLimit() < vulkanParticles);
+
+        RenderBudget.update(true, HEIGHT, FOV,
+                CullingStrength.OFF, CullingStrength.OFF,
+                CullingStrength.OFF, false, 0.0, RenderBackend.OPENGL);
         assertEquals(0.0, RenderBudget.effectiveEntityMinPixels());
         assertEquals(0, RenderBudget.effectiveBlockEntityLimit());
         assertEquals(0, RenderBudget.effectiveParticleLimit());

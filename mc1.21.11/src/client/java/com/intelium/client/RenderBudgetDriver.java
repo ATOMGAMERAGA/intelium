@@ -114,7 +114,8 @@ public final class RenderBudgetDriver {
                 CullingStrength.fromKey(cfg.blockEntityCulling),
                 particles,
                 cfg.adaptiveCulling,
-                PRESSURE.pressure(cfg.adaptiveFpsTarget));
+                PRESSURE.pressure(cfg.adaptiveFpsTarget),
+                Intelium.DETECTED_BACKEND);
     }
 
     /** Real (not GUI-scaled) height of the render target, in pixels. */

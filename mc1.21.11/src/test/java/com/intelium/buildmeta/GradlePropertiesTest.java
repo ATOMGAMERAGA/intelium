@@ -66,9 +66,9 @@ class GradlePropertiesTest {
     }
 
     @Test
-    @DisplayName("1.3.2 pins the verified stable dependency baseline")
+    @DisplayName("1.3.3 pins the verified stable dependency baseline")
     void stableReleaseBaseline() {
-        assertEquals("1.3.2", props.getProperty("mod_version"));
+        assertEquals("1.3.3", props.getProperty("mod_version"));
         assertEquals("0.19.3", props.getProperty("loader_version"));
         assertEquals("0.141.6+1.21.11", props.getProperty("fabric_version"));
         assertEquals("0.8.13+mc1.21.11", props.getProperty("sodium_version"));

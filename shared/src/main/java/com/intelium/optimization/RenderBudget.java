@@ -1,5 +1,7 @@
 package com.intelium.optimization;
 
+import com.intelium.RenderBackend;
+
 /**
  * The live state of Intelium's Render Budget Engine - the one object the
  * render-path hooks talk to.
@@ -68,11 +70,25 @@ public final class RenderBudget {
     public static void update(boolean on, int framebufferHeight, double fovDegrees,
                               CullingStrength entities, CullingStrength blockEntities,
                               CullingStrength particles, boolean adaptive, double pressure) {
+        update(on, framebufferHeight, fovDegrees, entities, blockEntities, particles,
+                adaptive, pressure, RenderBackend.UNKNOWN);
+    }
+
+    /**
+     * Backend-aware update. OpenGL receives a modest draw-call/burst adjustment
+     * through {@link BackendRenderTuning}; unknown backends retain the original
+     * policy rather than being guessed.
+     */
+    public static void update(boolean on, int framebufferHeight, double fovDegrees,
+                              CullingStrength entities, CullingStrength blockEntities,
+                              CullingStrength particles, boolean adaptive, double pressure,
+                              RenderBackend backend) {
         if (!on) {
             disable();
             return;
         }
         double p = adaptive ? Math.max(0.0, Math.min(1.0, pressure)) : 0.0;
+        double thresholdScale = BackendRenderTuning.thresholdScale(backend);
 
         // Block entities get the same apparent-size scale, but read it off
         // their own level: whoever turns entity culling off has not thereby
@@ -80,13 +96,17 @@ public final class RenderBudget {
         state = new State(true,
                 RenderBudgetTuning.pixelScale(framebufferHeight, fovDegrees),
                 RenderBudgetTuning.tightenThreshold(
-                        RenderBudgetTuning.entityMinPixels(entities), p),
+                        RenderBudgetTuning.entityMinPixels(entities) * thresholdScale, p),
                 RenderBudgetTuning.tightenThreshold(
-                        RenderBudgetTuning.entityMinPixels(blockEntities), p),
+                        RenderBudgetTuning.entityMinPixels(blockEntities) * thresholdScale, p),
                 RenderBudgetTuning.tightenBudget(
-                        RenderBudgetTuning.blockEntityBudget(blockEntities), p, BLOCK_ENTITY_FLOOR),
+                        BackendRenderTuning.blockEntityBudget(
+                                RenderBudgetTuning.blockEntityBudget(blockEntities), backend),
+                        p, BLOCK_ENTITY_FLOOR),
                 RenderBudgetTuning.tightenBudget(
-                        RenderBudgetTuning.particleBudget(particles), p, PARTICLE_FLOOR));
+                        BackendRenderTuning.particleBudget(
+                                RenderBudgetTuning.particleBudget(particles), backend),
+                        p, PARTICLE_FLOOR));
     }
 
     /**
@@ -186,6 +206,19 @@ public final class RenderBudget {
         State s = state;
         if (!s.active || s.particleLimit <= 0) return true;
         return PARTICLES.tryConsume(s.particleLimit);
+    }
+
+    /**
+     * Hot-path combined form for particle mixins. It performs one volatile
+     * state read instead of first asking {@link #particleBudgetOn()} and then
+     * asking {@link #allowParticle()}, which matters during the large bursts
+     * this budget exists to tame.
+     *
+     * @return true when this particle should be rejected
+     */
+    public static boolean shouldRejectParticle() {
+        State s = state;
+        return s.active && s.particleLimit > 0 && !PARTICLES.tryConsume(s.particleLimit);
     }
 
     /** How many particle spawns the previous tick turned away. */

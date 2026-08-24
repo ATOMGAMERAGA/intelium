@@ -61,7 +61,11 @@ public class InteliumClientInit implements ClientModInitializer {
         RenderBudgetDriver.tick(client);
         // Keep the live render tweaks reconciled with the config.
         RenderTweaks.apply();
-        // Keep Sodium's defer mode in sync with the fast-chunk-loading mode.
-        ChunkLoadingBooster.apply();
+        // Keep Sodium's defer mode in sync, and let the OpenGL-backed 26.1
+        // line protect frame pacing under sustained chunk-upload pressure.
+        boolean worldLoaded = client.level != null;
+        ChunkLoadingBooster.tick(client.getFps(), client.isWindowActive()
+                && worldLoaded && !RenderTweaks.fpsDeliberatelyThrottled(client),
+                worldLoaded);
     }
 }

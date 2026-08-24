@@ -30,9 +30,9 @@ in `src/main/resources/assets/intelium/icon.png`.
 
 | Area | What Intelium does |
 |---|---|
-| Render Budget Engine | Three optimizations of Intelium's own, inside the render path rather than on top of a vanilla setting. **Smart Entity Culling** skips entities that land on fewer pixels than a threshold — measured from the entity's real size against your resolution and FOV, so a dropped item stops drawing at ~16 blocks while a zombie keeps drawing past 100. **Block Entity Budget** caps how many chests, signs and banners are drawn per frame; they are the one thing Sodium cannot batch into the chunk mesh, which is why a storage room tanks the frame rate. **Particle Burst Limiter** caps particle spawns per tick, cutting the tail of a TNT chain without removing the effect. All three can tighten under FPS pressure and relax on recovery. |
-| Chunk build threading | Overrides Sodium's chunk-build worker count with a generation-, profile-, and backend-aware value. It scales with your CPU and reserves headroom for the render thread; on Vulkan it also leaves room for Blaze3D submission and Sodium's separate asynchronous culling worker. Manual overrides remain exact. |
-| Fast chunk loading | Overrides Sodium's chunk **defer mode** — which ships at the slowest setting (`Always`) — so freshly meshed chunks become visible much sooner, and boosts build throughput. **Fast** = one-frame delay (recommended), **Turbo** = zero-frame (fastest). Self-disables cleanly if a Sodium build moves the setting. |
+| Render Budget Engine | Three optimizations of Intelium's own, inside the render path rather than on top of a vanilla setting. **Smart Entity Culling** skips entities that land on fewer pixels than a threshold — measured from the entity's real size against your resolution and FOV, so a dropped item stops drawing while a zombie remains visible much farther away. **Block Entity Budget** caps individually drawn chests, signs and banners; **Particle Burst Limiter** cuts the tail of extreme particle bursts. OpenGL receives a modest draw-call-aware adjustment, and all three can tighten further under FPS pressure. Nearby, player and named entities remain protected. |
+| Chunk build threading | Overrides Sodium's chunk-build worker count with a generation-, profile-, and backend-aware value. It scales with your CPU and reserves headroom for the render thread. OpenGL Max FPS/Balanced keep room for driver work and mesh uploads; Vulkan keeps room for Blaze3D submission and Sodium's asynchronous culling worker. Smooth remains the higher-throughput streaming choice. Manual overrides remain exact. |
+| Fast chunk loading | Overrides Sodium's chunk **defer mode** — which ships at the slowest setting (`Always`) — so freshly meshed chunks become visible much sooner, and boosts build throughput. **Fast** normally uses a one-frame delay; on OpenGL it temporarily returns to conservative deferral only after sustained FPS pressure, then uses a long recovery window to avoid oscillation. **Turbo** remains zero-frame and fully user-directed. Self-disables cleanly if Sodium moves the setting. |
 | Live render tweaks | Opt-in caps on vanilla settings that cost real per-frame GPU/CPU time on weak iGPUs: entity render distance, particles, entity shadows, biome blending, clouds, graphics mode, smooth lighting, VSync and render distance. Each captures your original value and restores it when turned off — the captured originals are persisted, so the restore works even across a game restart. |
 | Optimization profile | **Max FPS / Balanced / Smooth** — shifts the chunk-worker trade-off toward peak frame rate or toward steady frame times while walking and turning. |
 | Adaptive performance | **Adaptive Render Distance** holds a user-set FPS target by stepping the render distance down when FPS stays low and back up when there is headroom (hysteresis + hold timers, never below half your setting); when FPS collapses far below the target it reacts ~4× faster (halved hold, two chunks per step). **Background FPS Limit** caps the frame rate while the window is unfocused and restores your limit the instant focus returns. **Menu FPS Limit** does the same while a menu is open — frames nobody needs at full rate. |
@@ -60,8 +60,8 @@ contains both; pick the one matching your Minecraft version.
 
 | Jar | Minecraft | Java | Renderer | Sodium |
 |---|---|---|---|---|
-| `Intelium-v1.3.2-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.13 build target |
-| `Intelium-v1.3.2-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.1 build target |
+| `Intelium-v1.3.3-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.13 build target |
+| `Intelium-v1.3.3-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.1 build target |
 
 - Fabric Loader **0.19.0+** (release builds use 0.19.3)
 - Fabric API
@@ -110,8 +110,8 @@ Settings are split across two pages: **General** (core + render tweaks) and
 |---|---|---|
 | Enable Intelium | `true` | Master switch. Greyed out when the GPU is unsupported. |
 | Optimization Profile | `Balanced` | **Max FPS** favors peak frame rate (fewer workers, even when Fast Chunk Loading is active); **Smooth** favors stable frame times while moving (more workers); **Balanced** is the middle. |
-| Chunk Build Workers | `Auto` | `0` / Auto = generation-, profile-, CPU-, and backend-aware default. Vulkan Auto preserves extra CPU headroom for rendering and async culling; `1–16` overrides Sodium's worker count directly. |
-| Fast Chunk Loading | `Fast` | **Off** leaves Sodium's defer mode; **Fast** = one-frame deferral (chunks appear much sooner, minimal cost); **Turbo** = zero-frame (fastest, may cost some smoothness). Also boosts build throughput. |
+| Chunk Build Workers | `Auto` | `0` / Auto = generation-, profile-, CPU-, and backend-aware default. OpenGL Max FPS/Balanced reserve two logical processors where possible for game/driver/upload work; Vulkan reserves equivalent submission/culling headroom. Smooth keeps the higher streaming target; `1–16` remains an exact override. |
+| Fast Chunk Loading | `Fast` | **Off** leaves Sodium's defer mode. **Fast** = one-frame deferral normally; OpenGL automatically uses conservative deferral during sustained FPS pressure and restores Fast after stable recovery. **Turbo** = zero-frame (fastest, may cost smoothness) and is never adaptively slowed. |
 
 **General → Render Tweaks** (applied live to vanilla settings; your originals are restored when turned off — even across a restart)
 
@@ -139,9 +139,9 @@ Settings are split across two pages: **General** (core + render tweaks) and
 | Option | Default | Notes |
 |---|---|---|
 | Render Budget Engine | `true` | Master switch for the three budgets below. Turning it off stands them all down instantly. |
-| Smart Entity Culling | `Balanced` | Skips drawing entities too small on screen to make out. The threshold is a real on-screen height in pixels (Light 6px, Balanced 12px, Aggressive 24px), so it scales with resolution and FOV and with each entity's own size. Nothing within 12 blocks is ever culled; players and named entities are always drawn. |
-| Block Entity Budget | `Balanced` | Caps block-entity draws per frame (Light 512, Balanced 256, Aggressive 128). An ordinary scene has a few dozen and never reaches it. |
-| Particle Burst Limiter | `Balanced` | Caps new particle spawns per tick (Light 1024, Balanced 512, Aggressive 256). Ordinary play spawns a handful per tick; explosions spawn thousands. |
+| Smart Entity Culling | `Balanced` | Skips drawing entities too small on screen to make out. Base thresholds are Light 6px, Balanced 12px, Aggressive 24px; OpenGL applies a 1.10× draw-call adjustment. The calculation scales with resolution, FOV and real entity size. Nothing within 12 blocks is culled; players and named entities are always drawn. |
+| Block Entity Budget | `Balanced` | Base per-frame ceilings are Light 512, Balanced 256, Aggressive 128; OpenGL uses 75% of each base ceiling (384/192/96) before adaptive pressure. An ordinary scene has a few dozen and never reaches it. |
+| Particle Burst Limiter | `Balanced` | Base per-tick ceilings are Light 1024, Balanced 512, Aggressive 256; OpenGL uses 87.5% (896/448/224) before adaptive pressure. Ordinary play spawns a handful per tick; explosions spawn thousands. |
 | Adaptive Budgets | `true` | Lets the three tighten further when FPS falls short of the Adaptive FPS Target, and relax the moment it recovers. At target it changes nothing. |
 
 **General → Adaptive Performance** (off by default)
@@ -149,7 +149,7 @@ Settings are split across two pages: **General** (core + render tweaks) and
 | Option | Default | Notes |
 |---|---|---|
 | Adaptive Render Distance | `false` | Steps render distance down one chunk at a time when FPS stays below the target, back up with sustained headroom. Hysteresis + hold timers prevent oscillation; never below half your own distance; restored when turned off. When FPS falls far below the target (under ~60%) it reacts faster: halved hold window, two chunks per step. |
-| Adaptive FPS Target | `60 FPS` | The frame rate the controller tries to hold (steps down below ~92%, back up above ~115%). |
+| Adaptive FPS Target | `60 FPS` | Target used by adaptive distance/budgets and OpenGL Fast chunk pacing. Distance steps down below ~92% and back up above ~115%; chunk pacing has its own 85%/97% hysteresis windows. |
 | Background FPS Limit | `Off` | Caps FPS while the window is unfocused; your own limit is restored the instant focus returns. Yields automatically to Dynamic FPS / FPS Reducer. |
 | Menu FPS Limit | `Off` | Caps FPS while a menu (pause screen, inventory, settings) is open — menus redraw the whole frame at full rate for nothing. Your own limit is restored the instant the menu closes. Yields automatically to Dynamic FPS / FPS Reducer, and the adaptive controller ignores FPS readings while the cap is active. |
 

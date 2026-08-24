@@ -400,6 +400,19 @@ public final class RenderTweaks {
         return mergeCaps(background, menu);
     }
 
+    /**
+     * Whether this FPS reading is deliberately limited rather than a measure
+     * of active-world render performance. Adaptive systems pause their
+     * transition counters in this state, so an alt-tab or capped menu cannot
+     * make OpenGL chunk loading look overloaded.
+     */
+    static boolean fpsDeliberatelyThrottled(Minecraft mc) {
+        if (!mc.isWindowActive() && ModCompat.frameLimiterPresent()) return true;
+        InteliumConfig cfg = InteliumConfigIO.get();
+        boolean master = Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE && cfg.tuneFrameSettings;
+        return fpsLimitFor(mc, cfg, master && !ModCompat.frameLimiterPresent()) > 0;
+    }
+
     private static boolean applyFpsLimit(Options o, InteliumConfig.CapturedOptions cap,
                                          int limit) {
         OptionInstance<Integer> opt = o.framerateLimit();

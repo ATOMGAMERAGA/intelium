@@ -71,14 +71,18 @@ public class InteliumClientInit implements ClientModInitializer {
         // Keep the live render tweaks reconciled with the config. Cheap: it
         // only writes a game option when the value actually differs.
         RenderTweaks.apply();
-        // Keep Sodium's defer mode in sync with the fast-chunk-loading mode.
-        ChunkLoadingBooster.apply();
         int fps = client.getCurrentFps();
         // Deliberately throttled frames (background/menu FPS caps) are not
         // stutter: feeding them to the overlay painted a red "1% low" for ten
         // seconds after every alt-tab, and feeding them to the benchmark let a
         // mid-run alt-tab poison the comparison.
         boolean measurable = !RenderTweaks.fpsDeliberatelyThrottled(client);
+        // Keep Sodium's defer mode in sync, and let OpenGL Fast temporarily
+        // protect frame pacing when sustained FPS pressure says uploads are
+        // amplifying a struggling render path.
+        boolean worldLoaded = client.world != null;
+        ChunkLoadingBooster.tick(fps, measurable && client.isWindowFocused()
+                && worldLoaded && !AbBenchmark.INSTANCE.isRunning(), worldLoaded);
         if (measurable) {
             InteliumOverlay.TRACKER.push(fps);
         }

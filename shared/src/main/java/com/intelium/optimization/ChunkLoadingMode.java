@@ -14,8 +14,9 @@ import java.util.Locale;
  *
  * <ul>
  *   <li>{@link #OFF} - leave Sodium's choice untouched.</li>
- *   <li>{@link #FAST} - one-frame deferral. Chunks appear much sooner with
- *       almost no frame-pacing cost. The recommended default.</li>
+ *   <li>{@link #FAST} - one-frame deferral normally. Chunks appear much sooner
+ *       with almost no frame-pacing cost; on OpenGL the client governor may
+ *       temporarily defer more under sustained FPS pressure.</li>
  *   <li>{@link #TURBO} - zero-frame deferral. Built chunks are uploaded the same
  *       frame, the fastest possible loading; may cost some smoothness when a lot
  *       of terrain streams in at once.</li>
@@ -24,7 +25,9 @@ import java.util.Locale;
  * <p>The actual Sodium {@code DeferMode} mapping lives in the client-side
  * booster (which touches Sodium types); this enum stays dependency-free and
  * unit-testable. Both {@link #FAST} and {@link #TURBO} also ask the chunk
- * tuner for extra build throughput (see {@link ChunkBuilderTuner}).
+ * tuner for extra build throughput (see {@link ChunkBuilderTuner}); only Fast
+ * participates in adaptive OpenGL pacing, because Turbo is an explicit request
+ * for the lowest possible appearance latency.
  */
 public enum ChunkLoadingMode {
     OFF("off"),

@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@DisplayName("26.x 1.3.2 release metadata")
+@DisplayName("26.x 1.3.3 release metadata")
 class Mc26ReleaseMetadataTest {
 
     private static Path project;
@@ -32,7 +32,7 @@ class Mc26ReleaseMetadataTest {
     @Test
     @DisplayName("Pins the stable Minecraft 26.2 dependency baseline")
     void stableDependencyBaseline() {
-        assertEquals("1.3.2", properties.getProperty("mod_version"));
+        assertEquals("1.3.3", properties.getProperty("mod_version"));
         assertEquals("26.2", properties.getProperty("minecraft_version"));
         assertEquals("0.19.3", properties.getProperty("loader_version"));
         assertEquals("0.158.0+26.2", properties.getProperty("fabric_version"));
@@ -69,13 +69,13 @@ class Mc26ReleaseMetadataTest {
     }
 
     @Test
-    @DisplayName("Release workflow publishes both 1.3.2 jars and checksums")
+    @DisplayName("Release workflow publishes both 1.3.3 jars and checksums")
     void releaseWorkflowMatches() throws IOException {
         String workflow = Files.readString(project.resolve("../.github/workflows/release.yml")
                 .normalize());
-        assertTrue(workflow.contains("INTELIUM_VERSION: \"1.3.2\""));
-        assertTrue(workflow.contains("Intelium-v1.3.2-1.21.11.jar"));
-        assertTrue(workflow.contains("Intelium-v1.3.2-26.x.jar"));
+        assertTrue(workflow.contains("INTELIUM_VERSION: \"1.3.3\""));
+        assertTrue(workflow.contains("Intelium-v1.3.3-1.21.11.jar"));
+        assertTrue(workflow.contains("Intelium-v1.3.3-26.x.jar"));
         assertTrue(workflow.contains(".sha256"));
         assertTrue(workflow.contains(".sha512"));
     }

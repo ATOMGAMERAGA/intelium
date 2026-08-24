@@ -29,8 +29,7 @@ public abstract class MixinParticleEngine {
     @Inject(method = "add(Lnet/minecraft/client/particle/Particle;)V",
             at = @At("HEAD"), cancellable = true, require = 0)
     private void intelium$budgetParticles(Particle particle, CallbackInfo ci) {
-        if (!RenderBudget.particleBudgetOn()) return;
-        if (!RenderBudget.allowParticle()) {
+        if (RenderBudget.shouldRejectParticle()) {
             ci.cancel();
         }
     }

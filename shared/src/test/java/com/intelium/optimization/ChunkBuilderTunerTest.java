@@ -222,6 +222,35 @@ class ChunkBuilderTunerTest {
     }
 
     @Test
+    @DisplayName("OpenGL Fast keeps render/driver headroom in Max FPS and Balanced")
+    void openGlFastKeepsDriverHeadroom() {
+        for (int cpu = 1; cpu <= 32; cpu++) {
+            for (IntelGpuGeneration gen : IntelGpuGeneration.values()) {
+                for (OptimizationProfile profile : new OptimizationProfile[]{
+                        OptimizationProfile.MAX_FPS, OptimizationProfile.BALANCED}) {
+                    int workers = ChunkBuilderTuner.recommendedWorkers(
+                            gen, profile, cpu, true, RenderBackend.OPENGL);
+                    assertTrue(workers <= Math.max(1, cpu - 2),
+                            gen + "/" + profile + "/cpu=" + cpu + " -> " + workers);
+                }
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("OpenGL Smooth retains the higher chunk-streaming target")
+    void openGlSmoothRetainsThroughput() {
+        int balanced = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.BALANCED,
+                8, true, RenderBackend.OPENGL);
+        int smooth = ChunkBuilderTuner.recommendedWorkers(
+                IntelGpuGeneration.GEN12_XE_LP, OptimizationProfile.SMOOTH,
+                8, true, RenderBackend.OPENGL);
+        assertEquals(6, balanced);
+        assertEquals(7, smooth);
+    }
+
+    @Test
     @DisplayName("A null backend keeps the previous automatic policy")
     void nullBackendIsBackwardCompatible() {
         int oldPolicy = ChunkBuilderTuner.recommendedWorkers(
