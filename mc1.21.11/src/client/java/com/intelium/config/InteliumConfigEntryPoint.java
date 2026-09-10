@@ -121,7 +121,9 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                                         : Text.literal(Integer.toString(value)))
                                 .setStorageHandler(saveHook)
                                 .setEnabledProvider(state ->
-                                        Intelium.IS_COMPATIBLE && Intelium.WORKER_TUNING_AVAILABLE)
+                                        Intelium.IS_COMPATIBLE
+                                        && com.intelium.Capabilities.available(
+                                                com.intelium.Capability.WORKER_TUNING))
                                 .setBinding(v -> cfg.chunkBuildWorkers = v,
                                             () -> Math.max(0, cfg.chunkBuildWorkers))
                                 .setApplyHook(state -> InteliumGame.reloadChunks())

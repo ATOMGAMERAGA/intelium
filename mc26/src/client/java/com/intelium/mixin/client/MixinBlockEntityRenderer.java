@@ -23,8 +23,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * per frame, so Intelium answers it with two extra questions: is this one far
  * enough to be a smudge (the same apparent-size test the entity budget uses,
  * against a block-sized object), and has this frame already drawn its full
- * allowance? The frame's allowance is generous enough that ordinary scenes never
- * reach it.
+ * allowance?
+ *
+ * <p>Both questions are now asked in a single shared call, which also
+ * guarantees that a nearby block entity is never the one dropped because of
+ * where it happened to fall in the iteration - see
+ * {@code RenderBudget.shouldSkipBlockEntity}. That call reads no clock while
+ * the frame-boundary hook is available, so this hook no longer pays a
+ * {@code System.nanoTime()} for every chest in the room.
  *
  * <p>Renderers that override the default gate - the beacon, whose beam is
  * visible from any distance - keep their own answer, which is the correct
@@ -42,13 +48,8 @@ public interface MixinBlockEntityRenderer {
         double dx = pos.getX() + 0.5 - cameraPos.x;
         double dy = pos.getY() + 0.5 - cameraPos.y;
         double dz = pos.getZ() + 0.5 - cameraPos.z;
-        double distanceSq = dx * dx + dy * dy + dz * dz;
 
-        if (RenderBudget.shouldCullBlockEntity(distanceSq)) {
-            cir.setReturnValue(false);
-            return;
-        }
-        if (!RenderBudget.allowBlockEntity(System.nanoTime())) {
+        if (RenderBudget.shouldSkipBlockEntity(dx * dx + dy * dy + dz * dz)) {
             cir.setReturnValue(false);
         }
     }

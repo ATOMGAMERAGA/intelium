@@ -92,6 +92,9 @@ java {
 }
 
 test {
+    // JarContentsTest reads the built jar to prove nothing is bundled, so the
+    // jar has to exist before the tests run.
+    dependsOn tasks.named('jar')
     useJUnitPlatform()
     testLogging {
         events 'passed', 'skipped', 'failed', 'standardError'

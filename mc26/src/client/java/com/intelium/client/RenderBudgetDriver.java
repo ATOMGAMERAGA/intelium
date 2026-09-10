@@ -47,6 +47,7 @@ public final class RenderBudgetDriver {
         // A fresh tick's particle allowance, whether or not the budget is on -
         // so turning it on mid-explosion starts from a clean count.
         RenderBudget.beginTick();
+        publishCameraEntity(client);
         if (!measurable(client)) {
             recoveryTicks = RECOVERY_TICKS;
         } else if (recoveryTicks > 0) {
@@ -113,6 +114,27 @@ public final class RenderBudgetDriver {
                 cfg.adaptiveCulling,
                 PRESSURE.pressure(cfg.adaptiveFpsTarget),
                 Intelium.DETECTED_BACKEND);
+    }
+
+    /**
+     * Publishes the camera entity's id for the entity hook to compare against.
+     *
+     * <p>The hook asks "am I the thing the camera is attached to?" for every
+     * entity of every frame. Answering it there meant a
+     * {@code Minecraft.getInstance()} plus a field chase per entity, to
+     * re-derive something that changes at most once a tick. Done here it costs
+     * one call a tick and turns the hook's question into an int compare.
+     */
+    private static void publishCameraEntity(Minecraft client) {
+        try {
+            var camera = client.getCameraEntity();
+            RenderBudget.setCameraEntityId(
+                    camera == null ? RenderBudget.NO_CAMERA_ENTITY : camera.getId());
+        } catch (Throwable t) {
+            // "Unknown" exempts nothing on this basis; players, projectiles,
+            // named and glowing entities are still protected by their own tests.
+            RenderBudget.setCameraEntityId(RenderBudget.NO_CAMERA_ENTITY);
+        }
     }
 
     /** Real (not GUI-scaled) height of the render target, in pixels. */

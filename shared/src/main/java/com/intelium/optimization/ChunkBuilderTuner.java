@@ -39,6 +39,12 @@ import com.intelium.RenderBackend;
  */
 public final class ChunkBuilderTuner {
 
+    /**
+     * At or below this many logical processors, a Gen 9 part is assumed to be a
+     * two-core SMT mobile chip and the low-core OpenGL ceiling applies.
+     */
+    static final int LOW_CORE_LOGICAL_PROCESSORS = 4;
+
     private ChunkBuilderTuner() {}
 
     /** Back-compat entry point: the {@link OptimizationProfile#BALANCED} value. */
@@ -130,6 +136,14 @@ public final class ChunkBuilderTuner {
         int floor = cpu >= 3 ? 2 : 1;
         target = Math.max(floor, Math.min(target, cpu));
 
+        // Low-core Gen 9 on OpenGL: the one configuration this mod is named
+        // for, and the one where the generic "logical processors minus
+        // headroom" arithmetic is most wrong. See lowCoreOpenGlCeiling.
+        int lowCore = lowCoreOpenGlCeiling(gen, profile, cpu, backend);
+        if (lowCore > 0) {
+            target = Math.min(target, lowCore);
+        }
+
         if (backend == RenderBackend.VULKAN) {
             // Vulkan submission and Sodium 0.9's async graph culling need CPU
             // time independently of chunk meshing. Preserve two logical
@@ -151,6 +165,50 @@ public final class ChunkBuilderTuner {
         }
 
         return clamp(1, Math.min(target, ceiling), cpu);
+    }
+
+    /**
+     * The worker ceiling for a low-core Gen 9 machine on OpenGL, or 0 when this
+     * policy does not apply.
+     *
+     * <p><b>Why logical processors mislead here.</b> {@code availableProcessors()}
+     * reports logical threads, not cores. The parts this mod exists for - an
+     * HD Graphics 520 in a Core i5-6200U, and its generation-mates - are
+     * <em>two physical cores with SMT</em>, so a machine that reports four
+     * processors has two real cores to divide between chunk meshing, the render
+     * thread, the game thread, and the Intel OpenGL driver's own work. The
+     * generic policy hands three of those four logical processors to meshing on
+     * Smooth, and two on Balanced, which is how a mod meant to remove hitches
+     * ends up causing them: chunk workers and the render thread contend for the
+     * same two cores, and the 1% low is what pays.
+     *
+     * <p>So on Gen 9 / Gen 9.5 with at most four logical processors, on OpenGL:
+     *
+     * <ul>
+     *   <li><b>Max FPS</b> gets a single worker. One mesh thread on one core
+     *       leaves the other core to the render thread and the driver, which is
+     *       the entire point of the profile.</li>
+     *   <li><b>Balanced and Smooth</b> get at most two. Two workers already
+     *       saturate both physical cores; a third only adds scheduling
+     *       overhead and cache pressure to a machine that has neither to
+     *       spare.</li>
+     * </ul>
+     *
+     * <p>This is a ceiling, never a floor: it can only take workers away from
+     * the generic policy, so a machine that would already have been given fewer
+     * keeps its lower number. Manual worker counts never reach this method -
+     * the mixin honours an explicit value directly - and Vulkan, unknown
+     * backends and newer generations are left entirely alone.
+     */
+    private static int lowCoreOpenGlCeiling(IntelGpuGeneration gen, OptimizationProfile profile,
+                                            int cpu, RenderBackend backend) {
+        if (backend != RenderBackend.OPENGL) return 0;
+        if (cpu > LOW_CORE_LOGICAL_PROCESSORS) return 0;
+        if (gen != IntelGpuGeneration.GEN9_SKYLAKE
+                && gen != IntelGpuGeneration.GEN9_5_KABY_COFFEE) {
+            return 0;
+        }
+        return profile == OptimizationProfile.MAX_FPS ? 1 : 2;
     }
 
     /**

@@ -30,16 +30,28 @@ in `src/main/resources/assets/intelium/icon.png`.
 
 | Area | What Intelium does |
 |---|---|
-| Render Budget Engine | Three optimizations of Intelium's own, inside the render path rather than on top of a vanilla setting. **Smart Entity Culling** skips entities that land on fewer pixels than a threshold — measured from the entity's real size against your resolution and FOV, so a dropped item stops drawing while a zombie remains visible much farther away. **Block Entity Budget** caps individually drawn chests, signs and banners; **Particle Burst Limiter** cuts the tail of extreme particle bursts. OpenGL receives a modest draw-call-aware adjustment, and all three can tighten further under FPS pressure. Nearby, player and named entities remain protected. |
-| Chunk build threading | Overrides Sodium's chunk-build worker count with a generation-, profile-, and backend-aware value. It scales with your CPU and reserves headroom for the render thread. OpenGL Max FPS/Balanced keep room for driver work and mesh uploads; Vulkan keeps room for Blaze3D submission and Sodium's asynchronous culling worker. Smooth remains the higher-throughput streaming choice. Manual overrides remain exact. |
-| Fast chunk loading | Overrides Sodium's chunk **defer mode** — which ships at the slowest setting (`Always`) — so freshly meshed chunks become visible much sooner, and boosts build throughput. **Fast** normally uses a one-frame delay; on OpenGL it temporarily returns to conservative deferral only after sustained FPS pressure, then uses a long recovery window to avoid oscillation. **Turbo** remains zero-frame and fully user-directed. Self-disables cleanly if Sodium moves the setting. |
+| Render Budget Engine | Three optimizations of Intelium's own, inside the render path rather than on top of a vanilla setting. **Smart Entity Culling** skips entities that land on fewer pixels than a threshold — measured from the entity's real size against your resolution and FOV, so a dropped item stops drawing while a zombie remains visible much farther away. **Block Entity Budget** caps individually drawn chests, signs and banners; **Particle Burst Limiter** cuts the tail of extreme particle bursts. OpenGL receives a modest draw-call-aware adjustment, and all three can tighten further under FPS pressure. Players, the camera entity, projectiles, named entities, glowing/outlined entities, vehicles with their riders, and anything within 12 blocks are never culled. |
+| Chunk build threading | Overrides Sodium's chunk-build worker count with a generation-, profile- and backend-aware value. On **Gen 9 / Gen 9.5 parts with four or fewer logical processors** — an HD 520 is two physical cores with SMT, so the logical count overstates the machine — OpenGL uses **1 worker for Max FPS and at most 2 otherwise**, because a third mesh thread only makes chunk workers and the render thread fight over the same two cores. Elsewhere it scales with your CPU and reserves render-thread headroom; Vulkan keeps room for Blaze3D submission and Sodium's asynchronous culling worker. Manual overrides remain exact. |
+| Fast chunk loading | Overrides Sodium's chunk **defer mode** — how many frames a finished mesh waits before it is uploaded. Chunk uploads run on the render thread, so forcing them buys faster chunk appearance and pays in frame time. **Fast** therefore follows your profile rather than always forcing one-frame: Max FPS defers conservatively, Smooth uses one-frame, Balanced switches between them under measured pressure with hysteresis. **Turbo** remains zero-frame and fully user-directed. Self-disables cleanly if Sodium moves the setting. |
 | Live render tweaks | Opt-in caps on vanilla settings that cost real per-frame GPU/CPU time on weak iGPUs: entity render distance, particles, entity shadows, biome blending, clouds, graphics mode, smooth lighting, VSync and render distance. Each captures your original value and restores it when turned off — the captured originals are persisted, so the restore works even across a game restart. |
 | Optimization profile | **Max FPS / Balanced / Smooth** — shifts the chunk-worker trade-off toward peak frame rate or toward steady frame times while walking and turning. |
 | Adaptive performance | **Adaptive Render Distance** holds a user-set FPS target by stepping the render distance down when FPS stays low and back up when there is headroom (hysteresis + hold timers, never below half your setting); when FPS collapses far below the target it reacts ~4× faster (halved hold, two chunks per step). **Background FPS Limit** caps the frame rate while the window is unfocused and restores your limit the instant focus returns. **Menu FPS Limit** does the same while a menu is open — frames nobody needs at full rate. |
-| Stutter visibility | The overlay shows the **1% low** and **minimum** FPS over the last few seconds, so you can see hitches, not just the headline average. |
-| GPU detection | On 26.2, reads Blaze3D's selected graphics device directly, so Vulkan identifies the GPU without unsafe OpenGL calls and hybrid-GPU laptops are judged by the device Minecraft actually uses. On 1.21.11/26.1 it uses the current OpenGL context. Handles Windows drivers, Linux/Mesa, PCI vendor ID `8086`, and VirGL guests that expose the host renderer. |
+| Frame-time measurement | On 26.2, frame intervals are measured at a verified per-frame hook rather than read off the game's trailing one-second FPS average, which cannot represent a hitch at all. Produces median, p95, p99, **1% low** and **0.1% low**, exportable to JSON/CSV from the settings page. The hot path is a subtract and two array stores into a preallocated ring buffer — no allocation, and percentiles only computed when something asks. |
+| Honest capabilities | Every hook is verified against the running game by **full method descriptor**, not just method name. Eight features (GPU detection, worker tuning, defer tuning, entity culling, block-entity budget, particle limiter, menu detection, frame boundary) fail independently: one missing hook disables one feature, greys out that option with the reason in its tooltip, and leaves the rest working. |
+| GPU detection | On 26.2, reads Blaze3D's selected graphics device directly, so the GPU is identified without unsafe OpenGL calls and hybrid-GPU laptops are judged by the device Minecraft actually uses. A device that reports no backend name resolves to OpenGL, because that is 26.2's default; a renderer that names itself something unrecognised stays Unknown and keeps the conservative policy. On 1.21.11 it uses the current OpenGL context. Handles Windows drivers, Linux/Mesa, PCI vendor ID `8086`, and VirGL guests that expose the host renderer. |
 | Honest gating | Disables itself cleanly on NVIDIA / AMD / unrecognized / too-old GPUs. A Mixin config plugin checks each hook's Sodium target at load time, so any compatible Sodium version works and incompatible internals self-disable instead of crashing. |
 
+> **Why Intelium does not manage Sodium's own performance options.**
+> A "one-click Max FPS preset" for Sodium's Block Face Culling, Fog Occlusion,
+> Entity Culling, Animate Only Visible Textures, Hidden Fluid Culling and
+> Block Transparency sounds useful, so it was checked against the resolved
+> Sodium 0.9.1 jar. Every one of them already ships at its optimal value:
+> the five performance flags default to `true`, `hiddenFluidCulling` defaults to
+> `true`, `quadSplittingMode` defaults to `SAFE`, and `chunkBuildDeferMode`
+> defaults to `ALWAYS`. Forcing them would be a no-op for almost everyone, and
+> for the few who changed one deliberately it would silently overwrite their
+> choice. So Intelium does not ship that switch.
+>
 > **Why these levers and not draw-call batching / persistent buffers?**
 > Sodium already owns backend-native batching, chunk-geometry memory, and
 > occlusion culling on its supported OpenGL/Vulkan paths.
@@ -60,8 +72,18 @@ contains both; pick the one matching your Minecraft version.
 
 | Jar | Minecraft | Java | Renderer | Sodium |
 |---|---|---|---|---|
-| `Intelium-v1.3.3-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.13 build target |
-| `Intelium-v1.3.3-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 | OpenGL (26.1.x) / **Vulkan** (26.2) | 0.8.x / 0.9.1 build target |
+| `Intelium-v1.3.4-1.21.11.jar` | 1.21.11 | 21 | OpenGL | 0.8.13 build target |
+| `Intelium-v1.3.4-26.2.jar` | 26.2 | 25 | **OpenGL** (default) · Vulkan (experimental) | 0.9.1 build target |
+
+> **On 26.2, OpenGL is the default renderer** and Vulkan is an experimental
+> opt-in you have to turn on. Intelium tunes OpenGL first: that is what almost
+> everyone is actually running, and it is where an Intel iGPU's render thread
+> and driver contend for the same cores. Vulkan support is intact and untouched
+> by the OpenGL-specific policies.
+>
+> The 26.x jar declares `>=26.2 <26.3`. It compiles directly against 26.2 class
+> and method names and 26.1 has not been runtime-tested, so it does not claim
+> 26.1 support it cannot back.
 
 - Fabric Loader **0.19.0+** (release builds use 0.19.3)
 - Fabric API
@@ -69,6 +91,11 @@ contains both; pick the one matching your Minecraft version.
   the Sodium version: if a newer Sodium changes the internals a hook relies on,
   that hook self-disables cleanly (no crash) and everything else keeps working.
 - An Intel GPU (HD 520 / Gen 9 Skylake or newer)
+
+Intelium bundles nothing: no Sodium, Fabric, Iris or third-party client files are
+inside the jar, and a build test enforces that. It uses no private or guessed
+client APIs and probes for no invented mod ids, so the same jar runs on stock
+Fabric 26.2 and under third-party Fabric-based clients alike.
 
 ## Supported Intel generations
 
@@ -110,8 +137,8 @@ Settings are split across two pages: **General** (core + render tweaks) and
 |---|---|---|
 | Enable Intelium | `true` | Master switch. Greyed out when the GPU is unsupported. |
 | Optimization Profile | `Balanced` | **Max FPS** favors peak frame rate (fewer workers, even when Fast Chunk Loading is active); **Smooth** favors stable frame times while moving (more workers); **Balanced** is the middle. |
-| Chunk Build Workers | `Auto` | `0` / Auto = generation-, profile-, CPU-, and backend-aware default. OpenGL Max FPS/Balanced reserve two logical processors where possible for game/driver/upload work; Vulkan reserves equivalent submission/culling headroom. Smooth keeps the higher streaming target; `1–16` remains an exact override. |
-| Fast Chunk Loading | `Fast` | **Off** leaves Sodium's defer mode. **Fast** = one-frame deferral normally; OpenGL automatically uses conservative deferral during sustained FPS pressure and restores Fast after stable recovery. **Turbo** = zero-frame (fastest, may cost smoothness) and is never adaptively slowed. |
+| Chunk Build Workers | `Auto` | `0` / Auto = generation-, profile-, CPU- and backend-aware default. On Gen 9 / Gen 9.5 with four or fewer logical processors, OpenGL uses 1 worker for Max FPS and at most 2 otherwise. On larger CPUs, OpenGL Max FPS/Balanced reserve two logical processors for game/driver/upload work and Vulkan reserves equivalent submission/culling headroom. `1–16` remains an exact override. |
+| Fast Chunk Loading | `Fast` | **Off** restores your own Sodium defer mode. **Fast** follows your profile (see above) rather than always forcing one-frame. **Turbo** = zero-frame (fastest appearance, roughest pacing) and is never adaptively slowed, on any backend under any profile. |
 
 **General → Render Tweaks** (applied live to vanilla settings; your originals are restored when turned off — even across a restart)
 
@@ -139,8 +166,8 @@ Settings are split across two pages: **General** (core + render tweaks) and
 | Option | Default | Notes |
 |---|---|---|
 | Render Budget Engine | `true` | Master switch for the three budgets below. Turning it off stands them all down instantly. |
-| Smart Entity Culling | `Balanced` | Skips drawing entities too small on screen to make out. Base thresholds are Light 6px, Balanced 12px, Aggressive 24px; OpenGL applies a 1.10× draw-call adjustment. The calculation scales with resolution, FOV and real entity size. Nothing within 12 blocks is culled; players and named entities are always drawn. |
-| Block Entity Budget | `Balanced` | Base per-frame ceilings are Light 512, Balanced 256, Aggressive 128; OpenGL uses 75% of each base ceiling (384/192/96) before adaptive pressure. An ordinary scene has a few dozen and never reaches it. |
+| Smart Entity Culling | `Balanced` | Skips drawing entities too small on screen to make out. Base thresholds are Light 6px, Balanced 12px, Aggressive 24px; OpenGL applies a 1.10× draw-call adjustment. The calculation scales with resolution, FOV and real entity size. Never culled at any distance: players, the camera entity, projectiles (arrows, tridents, thrown potions), named entities and holograms, glowing/outlined entities, and vehicles together with their riders — plus anything within 12 blocks. |
+| Block Entity Budget | `Balanced` | Base per-frame ceilings are Light 512, Balanced 256, Aggressive 128; OpenGL uses 75% of each base ceiling (384/192/96) before adaptive pressure. An ordinary scene has a few dozen and never reaches it. Block entities within 12 blocks are drawn unconditionally, so the ceiling can never make a nearby chest vanish while a distant one draws. |
 | Particle Burst Limiter | `Balanced` | Base per-tick ceilings are Light 1024, Balanced 512, Aggressive 256; OpenGL uses 87.5% (896/448/224) before adaptive pressure. Ordinary play spawns a handful per tick; explosions spawn thousands. |
 | Adaptive Budgets | `true` | Lets the three tighten further when FPS falls short of the Adaptive FPS Target, and relax the moment it recovers. At target it changes nothing. |
 
@@ -156,9 +183,29 @@ Settings are split across two pages: **General** (core + render tweaks) and
 **Overlay & Test**
 
 This page and its movable benchmark overlay are available in the 1.21.11 jar.
-The 26.x jar keeps the performance controls inside Sodium's settings page but
-does not expose the legacy immediate-mode overlay on Minecraft's retained-mode
-Vulkan UI.
+The 26.2 jar keeps the performance controls inside Sodium's settings page but
+does not port the legacy immediate-mode overlay to 26.x's retained-mode GUI.
+
+Instead, the 26.2 jar has a **Diagnostics → Export Frame Report** button. It
+writes the last few seconds of measured frame times to
+`config/intelium-reports/` as JSON and appends a row to a CSV, so two builds can
+be compared by arithmetic rather than memory:
+
+| Field | Meaning |
+|---|---|
+| `average_fps` | Mean frame rate over the window |
+| `median_frametime_ms` | The typical frame |
+| `p95_frametime_ms` / `p99_frametime_ms` | The slow tail — where stutter lives |
+| `one_percent_low_fps` / `point_one_percent_low_fps` | Standard 1% / 0.1% lows |
+| `samples` / `discarded` | Frames measured, and frames rejected as stalls |
+| `warm` | Whether the window is long enough to trust |
+| `cap_active` | Whether VSync or an FPS limit was pacing these frames |
+| `backend`, `gpu`, `profile`, `chunk_mode`, `workers`, `capabilities` | What produced the numbers |
+
+Unfocused frames, menu-capped frames and frames with no world loaded are
+excluded and restart the warm-up. VSync and FPS caps are flagged rather than
+discarded — a frame *at* the cap proves nothing about headroom, but one *past*
+it is still a real spike.
 
 | Option | Default | Notes |
 |---|---|---|
@@ -196,7 +243,7 @@ The repo is split by Minecraft line, with shared, version-agnostic logic in
 `shared/`:
 
 - `mc1.21.11/` — the 1.21.11 build (Yarn mappings, Loom, Java 21).
-- `mc26/` — the 26.x build (official Mojang mappings, the non-remapping
+- `mc26/` — the 26.2 build (official Mojang mappings, the non-remapping
   `net.fabricmc.fabric-loom` plugin, Java 25).
 - `shared/` — pure logic (GPU/backend classifier, config, optimization math, HUD math,
   mod-compat) compiled into both, with its unit tests.
@@ -205,12 +252,63 @@ The repo is split by Minecraft line, with shared, version-agnostic logic in
 # 1.21.11 jar (needs JDK 21)
 ./mc1.21.11/gradlew -p mc1.21.11 build
 
-# 26.x jar (needs JDK 25)
+# 26.2 jar (needs JDK 25)
 ./mc26/gradlew -p mc26 build
 ```
 
 Each jar lands in `<target>/build/libs/intelium-<version>.jar`. CI builds both
 and attaches them to a single GitHub release.
+
+## Verifying it on your own machine
+
+Intelium ships no FPS claims, because a number measured on someone else's
+hardware tells you nothing about yours. What it ships instead is the means to
+measure your own. On the 26.2 jar the procedure is short:
+
+**Setup — keep everything but Intelium identical between runs.** Same world,
+same spawn point, same render distance, same resolution and window mode, same
+JVM heap, same driver. Turn **VSync off** and remove any FPS limit, or every
+run will report your refresh rate. Note that Iris changes what all of this
+means, so measure with shaders off first.
+
+**Each run:**
+
+1. Load the world and stand still for **60 seconds**. Terrain streaming and
+   shader compilation both happen here, and neither is what you are measuring.
+   Intelium restarts its own warm-up when a world loads, so it is already
+   ignoring these frames.
+2. Play the scenario for at least **120 seconds** without alt-tabbing. Three
+   scenarios are worth running separately, because they stress different
+   things: **standing still** in an ordinary scene, **turning continuously**
+   with a lot of visible terrain, and **sprinting or flying** into unloaded
+   chunks. If you play UHC or PvP, a **crowded lobby** is the fourth.
+3. Open **Video Settings → Intelium → Diagnostics → Export Frame Report**.
+4. Repeat each run **three times** and compare medians, not single runs.
+
+**What to compare.** The report writes both a timestamped JSON file and a row
+appended to `config/intelium-reports/intelium-frametimes.csv`, so several runs
+line up as a table. `average_fps` is the headline; `one_percent_low_fps` and
+`p99_frametime_ms` are the ones that tell you whether the *stutter* changed.
+A build can raise average FPS and still feel worse — that shows up here as a
+1% low that fell while the average rose.
+
+Check `warm` is `true` and `cap_active` is `false` before trusting a row. A
+`warm: false` row means the window was interrupted; a `cap_active: true` row
+means VSync or an FPS limit was pacing those frames and the numbers describe
+the cap, not the machine.
+
+**Comparing against a baseline.** Run the same scenario three ways: Sodium
+alone with Intelium's jar removed, then Intelium with **Enable Intelium** off
+(which restores your captured Sodium and vanilla settings), then Intelium on.
+The second of those is the useful control — it isolates Intelium's effect from
+any other difference between the two launches.
+
+**On a third-party Fabric client.** The startup log carries one Intelium
+report naming the Minecraft, Fabric Loader, Fabric API, Sodium and Iris
+versions, the detected backend and GPU, and which capabilities attached. If a
+feature is greyed out in the settings, its tooltip says why. Both are worth
+including in a bug report — on a client shipping its own Sodium build, that
+line is usually the whole answer.
 
 ## Author & links
 

@@ -1,9 +1,15 @@
 package com.intelium.client;
 
+import com.intelium.Capabilities;
+import com.intelium.Capability;
 import com.intelium.Intelium;
+import com.intelium.RenderBackend;
 import com.intelium.config.InteliumConfigIO;
 import com.intelium.optimization.ChunkLoadingGovernor;
 import com.intelium.optimization.ChunkLoadingMode;
+import com.intelium.optimization.DeferDecision;
+import com.intelium.optimization.DeferPolicy;
+import com.intelium.optimization.OptimizationProfile;
 import net.caffeinemc.mods.sodium.client.SodiumClientMod;
 import net.caffeinemc.mods.sodium.client.gui.SodiumOptions;
 import net.caffeinemc.mods.sodium.client.render.chunk.DeferMode;
@@ -12,12 +18,15 @@ import net.caffeinemc.mods.sodium.client.render.chunk.DeferMode;
  * "Fast chunk loading" — overrides Sodium's chunk-build <em>defer mode</em> so
  * freshly meshed chunks become visible sooner.
  *
- * <p>Sodium defaults to {@link DeferMode#ALWAYS} (most deferred / smoothest but
- * slowest to appear). Intelium normally turns that latency down to one frame
- * ({@link ChunkLoadingMode#FAST}) or zero frames ({@link ChunkLoadingMode#TURBO});
- * Fast can temporarily defer more when the OpenGL governor sees sustained FPS
- * pressure, while Turbo and Vulkan are never adaptively changed.
- * The setting is read by Sodium's render-section manager every frame, so the
+ * <p>Sodium defaults to {@link DeferMode#ALWAYS}: completed meshes wait for a
+ * frame with room to upload them. That is the <em>best</em> setting for average
+ * FPS and frame pacing and the worst for how quickly chunks appear, which is
+ * why Intelium does not simply override it everywhere any more. Which deferral
+ * applies is now decided by {@link DeferPolicy} from the user's profile and the
+ * backend, so "Max FPS" defers conservatively and "Smooth" does not - see that
+ * class for why the old behaviour contradicted its own labels.
+ *
+ * <p>The setting is read by Sodium's render-section manager every frame, so the
  * change takes effect immediately - no reload needed - though Intelium asks for
  * one anyway when the option is toggled so the difference is visible at once.
  *
@@ -44,18 +53,25 @@ public final class ChunkLoadingBooster {
      */
     public static synchronized void tick(int fps, boolean measurable, boolean worldLoaded) {
         var cfg = InteliumConfigIO.get();
-        ChunkLoadingMode mode = Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE
-                ? ChunkLoadingMode.fromKey(cfg.chunkLoadingMode)
-                : ChunkLoadingMode.OFF;
         if (!worldLoaded) {
-            // A fresh world gets the normal fast path; never carry a protected
+            // A fresh world gets the normal path; never carry a protected
             // upload state over from a previous server/session.
             GOVERNOR.reset();
         } else {
-            GOVERNOR.update(mode, Intelium.DETECTED_BACKEND, fps,
-                    cfg.adaptiveFpsTarget, measurable);
+            GOVERNOR.update(configuredMode(cfg), configuredProfile(cfg),
+                    Intelium.DETECTED_BACKEND, fps, cfg.adaptiveFpsTarget, measurable);
         }
         applyGuarded();
+    }
+
+    private static ChunkLoadingMode configuredMode(com.intelium.config.InteliumConfig cfg) {
+        return Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE
+                ? ChunkLoadingMode.fromKey(cfg.chunkLoadingMode)
+                : ChunkLoadingMode.OFF;
+    }
+
+    private static OptimizationProfile configuredProfile(com.intelium.config.InteliumConfig cfg) {
+        return OptimizationProfile.fromKey(cfg.profile);
     }
 
     /**
@@ -70,8 +86,14 @@ public final class ChunkLoadingBooster {
         if (!available) return;
         try {
             applyUnsafe();
+            if (!Capabilities.available(Capability.DEFER_TUNING)) {
+                // Reached Sodium's options without throwing: the feature works.
+                Capabilities.set(Capability.DEFER_TUNING, true, null);
+            }
         } catch (Throwable t) {
             available = false;
+            Capabilities.disable(Capability.DEFER_TUNING,
+                    "Sodium's chunk defer mode is not reachable on this Sodium build");
             Intelium.LOGGER.warn("Intelium: Sodium's chunk defer mode isn't reachable on this "
                     + "Sodium build - fast chunk loading disabled (no crash).", t);
             // With the internals unreachable, the restore path above can never
@@ -93,21 +115,27 @@ public final class ChunkLoadingBooster {
         SodiumOptions opts = SodiumClientMod.options();
         if (opts == null || opts.performance == null) return;
 
-        ChunkLoadingMode mode = Intelium.IS_ENABLED && Intelium.IS_COMPATIBLE
-                ? ChunkLoadingMode.fromKey(InteliumConfigIO.get().chunkLoadingMode)
-                : ChunkLoadingMode.OFF;
+        var cfg = InteliumConfigIO.get();
+        ChunkLoadingMode mode = configuredMode(cfg);
+        OptimizationProfile profile = configuredProfile(cfg);
+        RenderBackend backend = Intelium.DETECTED_BACKEND;
 
-        if (mode != ChunkLoadingMode.FAST
-                || Intelium.DETECTED_BACKEND != com.intelium.RenderBackend.OPENGL) {
+        // Everything except governed Balanced-on-OpenGL has a fixed decision,
+        // so the governor is dropped rather than left holding state that would
+        // be applied the moment the user switched back.
+        if (!DeferPolicy.governed(mode, profile, backend)) {
             GOVERNOR.reset();
         }
+
+        DeferDecision decision =
+                DeferPolicy.decide(mode, profile, backend, GOVERNOR.isThrottled());
 
         // The captured original is persisted in intelium.json (not a static):
         // Sodium saves the overridden value into its own config file, so without
         // persistence the user's real defer mode would be lost across a restart.
-        var cap = InteliumConfigIO.get().captured;
+        var cap = cfg.captured;
 
-        if (mode == ChunkLoadingMode.OFF) {
+        if (decision == DeferDecision.KEEP_USER) {
             // Restore the user's setting if we previously changed it.
             if (cap.sodiumDeferMode != null) {
                 setIfChanged(opts, parseDeferMode(cap.sodiumDeferMode,
@@ -122,17 +150,21 @@ public final class ChunkLoadingBooster {
             cap.sodiumDeferMode = opts.performance.chunkBuildDeferMode.name();
             InteliumConfigIO.flush();
         }
-        DeferMode desired;
-        if (mode == ChunkLoadingMode.TURBO) {
-            desired = DeferMode.ZERO_FRAMES;
-        } else {
-            // Normal OpenGL Fast uses one frame. Sustained FPS pressure falls
-            // back to Sodium's conservative queue until the hysteresis window
-            // confirms recovery, preventing chunk uploads from amplifying a
-            // struggling frame. Vulkan never enters this branch's governor.
-            desired = GOVERNOR.isThrottled() ? DeferMode.ALWAYS : DeferMode.ONE_FRAME;
-        }
-        setIfChanged(opts, desired);
+        setIfChanged(opts, toSodium(decision, opts.performance.chunkBuildDeferMode));
+    }
+
+    /**
+     * Maps Intelium's backend-independent decision onto Sodium's own enum. The
+     * fallback keeps whatever Sodium already had, so an enum constant that a
+     * future Sodium removed cannot leave the setting in a guessed state.
+     */
+    private static DeferMode toSodium(DeferDecision decision, DeferMode current) {
+        return switch (decision) {
+            case ALWAYS -> DeferMode.ALWAYS;
+            case ONE_FRAME -> DeferMode.ONE_FRAME;
+            case ZERO_FRAMES -> DeferMode.ZERO_FRAMES;
+            case KEEP_USER -> current;
+        };
     }
 
     private static DeferMode parseDeferMode(String name, DeferMode fallback) {

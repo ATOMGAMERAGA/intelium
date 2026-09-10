@@ -1,13 +1,12 @@
 package com.intelium.mixin;
 
+import com.intelium.Capabilities;
+import com.intelium.Capability;
 import com.intelium.Intelium;
-import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.tree.MethodNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
-import java.io.InputStream;
 import java.util.List;
 import java.util.Set;
 
@@ -15,16 +14,22 @@ import java.util.Set;
  * Makes Intelium compatible with <em>any</em> Sodium version that runs on the
  * supported Minecraft versions, without ever crashing on internal differences.
  *
- * <p>Intelium's two mixins target Sodium internals that can change between
+ * <p>Intelium's Sodium-facing mixins target internals that can change between
  * releases. Rather than pin to one Sodium version (and refuse others) or apply
- * blindly (and hard-crash when a target class is missing), this plugin checks at
- * load time whether each mixin's target class - and, for the worker-count hook,
- * the exact method - is present. If not, the mixin is simply not applied: the
- * affected feature disables itself cleanly while everything else keeps working.
+ * blindly (and hard-crash when a target is missing), this plugin verifies at
+ * load time that each mixin's target class - and, for the worker-count hook,
+ * the exact method <em>and descriptor</em> - is present. If not, the mixin is
+ * simply not applied: the affected feature reports itself unavailable while
+ * everything else keeps working.
  *
- * <p>The injectors use {@code defaultRequire: 0}, so even when a target class
- * exists but its injection point shifted, the hook no-ops instead of crashing.
- * Capability flags are published to {@link Intelium} for status reporting.
+ * <p>Checking the descriptor and not merely the name is the point. A hook whose
+ * target changed shape used to be applied anyway, match nothing, and pass
+ * silently under {@code defaultRequire: 0} while the settings screen still
+ * offered the feature. See {@link ClassMemberProbe}.
+ *
+ * <p>Each gate publishes its result to {@link Capabilities}, so the startup
+ * diagnostic and the settings UI can say which feature is off and why, instead
+ * of the whole mod going dark or, worse, pretending to work.
  */
 public class InteliumMixinPlugin implements IMixinConfigPlugin {
 
@@ -32,6 +37,13 @@ public class InteliumMixinPlugin implements IMixinConfigPlugin {
             "net.caffeinemc.mods.sodium.client.render.chunk.compile.executor.ChunkBuilder";
     private static final String WORLD_RENDERER =
             "net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer";
+
+    /**
+     * Verified against Sodium 0.9.1+mc26.2:
+     * {@code private static int getThreadCount()} -> {@code ()I}.
+     */
+    private static final String GET_THREAD_COUNT = "getThreadCount";
+    private static final String GET_THREAD_COUNT_DESC = "()I";
 
     @Override
     public void onLoad(String mixinPackage) {}
@@ -44,67 +56,52 @@ public class InteliumMixinPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (mixinClassName.endsWith("MixinChunkBuilder")) {
-            boolean ok = classExists(CHUNK_BUILDER) && methodExists(CHUNK_BUILDER, "getThreadCount");
-            Intelium.WORKER_TUNING_AVAILABLE = ok;
-            if (!ok) {
-                Intelium.LOGGER.warn("Intelium: Sodium ChunkBuilder.getThreadCount() not found on "
-                        + "this Sodium build - chunk-worker tuning disabled (no crash).");
-            }
-            return ok;
+            return gate(Capability.WORKER_TUNING, CHUNK_BUILDER,
+                    GET_THREAD_COUNT, GET_THREAD_COUNT_DESC);
         }
         if (mixinClassName.endsWith("MixinSodiumWorldRenderer")) {
-            // Detection also runs from the client tick, so this is only a fallback.
-            return classExists(WORLD_RENDERER);
+            // Detection also runs from the client tick, so this is a fallback:
+            // the class existing is the whole requirement, and the constructor
+            // is not a signature Intelium depends on.
+            boolean ok = ClassMemberProbe.classExists(WORLD_RENDERER);
+            if (!ok) {
+                Capabilities.disable(Capability.GPU_DETECTION,
+                        "Sodium's SodiumWorldRenderer is absent; detection falls back to "
+                                + "the client tick");
+            }
+            return ok;
         }
         return true;
     }
 
     /**
-     * Reports whether a class is present <em>without loading it</em>.
+     * Verifies one hook's target and records the capability either way.
      *
-     * <p>We deliberately do NOT use {@code Class.forName}: forcing a Sodium
-     * class to load here - during mixin-config preparation, before the DEFAULT
-     * mixin phase - <em>defines</em> it in the class loader too early. Other
-     * mods' mixins that target the same class (notably Iris's
-     * {@code mixins.iris.compat.sodium.json:MixinSodiumWorldRenderer}) then fail
-     * to apply with {@code MixinTargetAlreadyLoadedException}, crashing the game
-     * on startup. Looking the class file up as a classpath resource answers the
-     * "does it exist?" question without ever loading the class.
+     * <p>The failure message names the class, the member and the descriptor
+     * that was expected, because the only useful bug report for this is one
+     * that says what the running Sodium has instead.
      */
-    private static boolean classExists(String name) {
-        return InteliumMixinPlugin.class.getClassLoader()
-                .getResource(resourcePath(name)) != null;
-    }
-
-    /**
-     * Reports whether {@code className} declares a method named
-     * {@code methodName}, by parsing the class bytes with ASM rather than
-     * loading the class (see {@link #classExists(String)} for why loading is
-     * unsafe here).
-     */
-    private static boolean methodExists(String className, String methodName) {
-        try (InputStream in = classResourceStream(className)) {
-            if (in == null) return false;
-            ClassNode node = new ClassNode();
-            new ClassReader(in).accept(node,
-                    ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-            if (node.methods == null) return false;
-            for (MethodNode m : node.methods) {
-                if (m.name.equals(methodName)) return true;
-            }
-            return false;
-        } catch (Throwable t) {
+    private static boolean gate(Capability capability, String className,
+                                String methodName, String descriptor) {
+        if (!ClassMemberProbe.classExists(className)) {
+            Capabilities.set(capability, false, className + " is not present");
+            Intelium.LOGGER.warn("Intelium: {} not found on this Sodium build - {} disabled "
+                    + "(no crash).", className, capability.name());
             return false;
         }
-    }
-
-    private static String resourcePath(String binaryName) {
-        return binaryName.replace('.', '/') + ".class";
-    }
-
-    private static InputStream classResourceStream(String binaryName) {
-        return InteliumMixinPlugin.class.getClassLoader()
-                .getResourceAsStream(resourcePath(binaryName));
+        if (!ClassMemberProbe.methodExists(className, methodName, descriptor)) {
+            int overloads = ClassMemberProbe.countMethods(className, methodName);
+            String reason = overloads == 0
+                    ? className + "." + methodName + " is gone"
+                    : className + "." + methodName + " changed signature (expected "
+                            + descriptor + "; " + overloads + " overload(s) present)";
+            Capabilities.set(capability, false, reason);
+            Intelium.LOGGER.warn("Intelium: {} - {} disabled (no crash).",
+                    reason, capability.name());
+            return false;
+        }
+        Capabilities.set(capability, true, null);
+        return true;
     }
 
     @Override

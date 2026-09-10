@@ -55,6 +55,9 @@ public final class IntelGpuDetector {
         Intelium.DETECTED_GENERATION = r.generation;
         Intelium.IS_COMPATIBLE = r.compatible;
         Intelium.DISABLED_REASON_KEY = r.reasonKey;
+        Capabilities.set(Capability.GPU_DETECTION,
+                !vendor.isEmpty() || !renderer.isEmpty(),
+                "the OpenGL context reported no vendor or renderer string");
 
         Intelium.LOGGER.info(
                 "Intelium status: gpu='{}' renderer='{}' detected={} active={}{}",
