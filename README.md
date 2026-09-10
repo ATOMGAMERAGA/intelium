@@ -259,6 +259,57 @@ The repo is split by Minecraft line, with shared, version-agnostic logic in
 Each jar lands in `<target>/build/libs/intelium-<version>.jar`. CI builds both
 and attaches them to a single GitHub release.
 
+## Verifying it on your own machine
+
+Intelium ships no FPS claims, because a number measured on someone else's
+hardware tells you nothing about yours. What it ships instead is the means to
+measure your own. On the 26.2 jar the procedure is short:
+
+**Setup — keep everything but Intelium identical between runs.** Same world,
+same spawn point, same render distance, same resolution and window mode, same
+JVM heap, same driver. Turn **VSync off** and remove any FPS limit, or every
+run will report your refresh rate. Note that Iris changes what all of this
+means, so measure with shaders off first.
+
+**Each run:**
+
+1. Load the world and stand still for **60 seconds**. Terrain streaming and
+   shader compilation both happen here, and neither is what you are measuring.
+   Intelium restarts its own warm-up when a world loads, so it is already
+   ignoring these frames.
+2. Play the scenario for at least **120 seconds** without alt-tabbing. Three
+   scenarios are worth running separately, because they stress different
+   things: **standing still** in an ordinary scene, **turning continuously**
+   with a lot of visible terrain, and **sprinting or flying** into unloaded
+   chunks. If you play UHC or PvP, a **crowded lobby** is the fourth.
+3. Open **Video Settings → Intelium → Diagnostics → Export Frame Report**.
+4. Repeat each run **three times** and compare medians, not single runs.
+
+**What to compare.** The report writes both a timestamped JSON file and a row
+appended to `config/intelium-reports/intelium-frametimes.csv`, so several runs
+line up as a table. `average_fps` is the headline; `one_percent_low_fps` and
+`p99_frametime_ms` are the ones that tell you whether the *stutter* changed.
+A build can raise average FPS and still feel worse — that shows up here as a
+1% low that fell while the average rose.
+
+Check `warm` is `true` and `cap_active` is `false` before trusting a row. A
+`warm: false` row means the window was interrupted; a `cap_active: true` row
+means VSync or an FPS limit was pacing those frames and the numbers describe
+the cap, not the machine.
+
+**Comparing against a baseline.** Run the same scenario three ways: Sodium
+alone with Intelium's jar removed, then Intelium with **Enable Intelium** off
+(which restores your captured Sodium and vanilla settings), then Intelium on.
+The second of those is the useful control — it isolates Intelium's effect from
+any other difference between the two launches.
+
+**On a third-party Fabric client.** The startup log carries one Intelium
+report naming the Minecraft, Fabric Loader, Fabric API, Sodium and Iris
+versions, the detected backend and GPU, and which capabilities attached. If a
+feature is greyed out in the settings, its tooltip says why. Both are worth
+including in a bug report — on a client shipping its own Sodium build, that
+line is usually the whole answer.
+
 ## Author & links
 
 Made by **ATOMLAND Studios**. Download page:
