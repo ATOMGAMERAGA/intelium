@@ -12,6 +12,10 @@ import com.intelium.RenderBackend;
  * governor temporarily asks the client glue to use Sodium's conservative defer
  * mode, then restores the one-frame path only after FPS has genuinely recovered.
  *
+ * <p>Only the <b>Balanced</b> profile is steered here. Max FPS defers
+ * conservatively at all times and Smooth never defers beyond one frame, so
+ * neither has anything for a governor to decide - see {@link DeferPolicy}.
+ *
  * <p>The state machine deliberately has asymmetric hold windows: it reacts in
  * about one second (or faster during a severe collapse), but needs three stable
  * seconds to recover. That hysteresis prevents the defer mode from bouncing
@@ -46,6 +50,9 @@ public final class ChunkLoadingGovernor {
      * Feeds one client-tick FPS sample and returns whether chunk uploads should
      * use the conservative defer mode.
      *
+     * <p>Back-compat form: assumes the governed {@link OptimizationProfile#BALANCED}
+     * profile.
+     *
      * @param mode       configured chunk-loading mode
      * @param backend    selected graphics backend
      * @param fps        current game FPS reading
@@ -55,7 +62,25 @@ public final class ChunkLoadingGovernor {
      */
     public boolean update(ChunkLoadingMode mode, RenderBackend backend,
                           int fps, int targetFps, boolean measurable) {
-        if (mode != ChunkLoadingMode.FAST || backend != RenderBackend.OPENGL) {
+        return update(mode, OptimizationProfile.BALANCED, backend, fps, targetFps, measurable);
+    }
+
+    /**
+     * Profile-aware form. Only the combination {@link DeferPolicy#governed}
+     * accepts is steered here; every other profile has a fixed decision, so the
+     * governor is reset rather than left holding state it will never apply.
+     *
+     * @param mode       configured chunk-loading mode
+     * @param profile    configured optimization profile
+     * @param backend    selected graphics backend
+     * @param fps        current game FPS reading
+     * @param targetFps  user's adaptive FPS target
+     * @param measurable false for background/menu-capped/benchmark samples;
+     *                   the current decision is held while counters are paused
+     */
+    public boolean update(ChunkLoadingMode mode, OptimizationProfile profile,
+                          RenderBackend backend, int fps, int targetFps, boolean measurable) {
+        if (!DeferPolicy.governed(mode, profile, backend)) {
             reset();
             return false;
         }

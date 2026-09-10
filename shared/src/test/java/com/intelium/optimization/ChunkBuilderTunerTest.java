@@ -204,11 +204,28 @@ class ChunkBuilderTunerTest {
         }
     }
 
+    /**
+     * Whether this combination falls under the deliberate low-core Gen 9 OpenGL
+     * ceiling, where OpenGL is <em>intentionally</em> more conservative than
+     * Vulkan - see {@code ChunkBuilderTuner.lowCoreOpenGlCeiling}.
+     */
+    private static boolean lowCoreGen9OpenGl(IntelGpuGeneration gen, int cpu) {
+        return cpu <= ChunkBuilderTuner.LOW_CORE_LOGICAL_PROCESSORS
+                && (gen == IntelGpuGeneration.GEN9_SKYLAKE
+                        || gen == IntelGpuGeneration.GEN9_5_KABY_COFFEE);
+    }
+
     @Test
     @DisplayName("Vulkan never raises the established OpenGL worker count")
     void vulkanNeverAddsContention() {
         for (int cpu = 1; cpu <= 32; cpu++) {
             for (IntelGpuGeneration gen : IntelGpuGeneration.values()) {
+                // A two-core Gen 9 part on OpenGL is the one place OpenGL is
+                // deliberately the more conservative of the two: the Intel
+                // OpenGL driver's own work lands on the render path, and there
+                // are only two physical cores to share. That exception is
+                // asserted directly below rather than weakened away here.
+                if (lowCoreGen9OpenGl(gen, cpu)) continue;
                 for (OptimizationProfile profile : OptimizationProfile.values()) {
                     int gl = ChunkBuilderTuner.recommendedWorkers(
                             gen, profile, cpu, true, RenderBackend.OPENGL);
@@ -216,6 +233,32 @@ class ChunkBuilderTunerTest {
                             gen, profile, cpu, true, RenderBackend.VULKAN);
                     assertTrue(vk <= gl,
                             gen + "/" + profile + "/cpu=" + cpu + " gl=" + gl + " vk=" + vk);
+                }
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Low-core Gen 9 OpenGL holds its own ceiling: 1 for Max FPS, 2 otherwise")
+    void lowCoreOpenGlHoldsItsCeiling() {
+        // The guarantee is about the machine, not about how the two backends
+        // compare: an HD 520-class part has two physical cores, so at most two
+        // mesh threads are useful and Max FPS wants only one.
+        for (int cpu = 1; cpu <= ChunkBuilderTuner.LOW_CORE_LOGICAL_PROCESSORS; cpu++) {
+            for (IntelGpuGeneration gen : new IntelGpuGeneration[]{
+                    IntelGpuGeneration.GEN9_SKYLAKE,
+                    IntelGpuGeneration.GEN9_5_KABY_COFFEE}) {
+                for (OptimizationProfile profile : OptimizationProfile.values()) {
+                    for (boolean fast : new boolean[]{false, true}) {
+                        int gl = ChunkBuilderTuner.recommendedWorkers(
+                                gen, profile, cpu, fast, RenderBackend.OPENGL);
+                        int ceiling = profile == OptimizationProfile.MAX_FPS ? 1 : 2;
+                        String where = gen + "/" + profile + "/cpu=" + cpu + "/fast=" + fast
+                                + " -> " + gl;
+                        assertTrue(gl <= ceiling, where);
+                        assertTrue(gl >= 1, "chunks must still get built: " + where);
+                        assertTrue(gl <= cpu, "never more workers than processors: " + where);
+                    }
                 }
             }
         }

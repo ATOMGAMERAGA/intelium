@@ -30,6 +30,13 @@ public class InteliumClientInit implements ClientModInitializer {
         // Report any companion performance mods (AsyncParticles, GPUTape) once.
         ModCompat.logOnce();
 
+        // The menu probe resolves its accessor in a static initialiser, so its
+        // capability is knowable before the first tick.
+        com.intelium.Capabilities.set(com.intelium.Capability.MENU_DETECTION,
+                MenuScreenProbe.available(),
+                MenuScreenProbe.available() ? null
+                        : "no current-screen accessor found on this Minecraft build");
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             // Fail soft: one escaped exception from a tick handler crashes the
             // whole game, which is exactly the failure mode every Intelium
@@ -51,8 +58,25 @@ public class InteliumClientInit implements ClientModInitializer {
     /** Latched after the first tick-handler failure; logs exactly once. */
     private static volatile boolean tickFailed;
 
+    /**
+     * Identity of the level the previous tick saw, so a world change can
+     * restart frame-time warm-up. Compared by reference: a new level object is
+     * a new world, and terrain streaming into it must not be measured as if it
+     * were steady-state rendering.
+     */
+    private static Object lastLevel;
+
     private static void tick(net.minecraft.client.Minecraft client) {
         IntelGpuDetector.detectOnce();
+        // One environment report, once detection has settled.
+        InteliumDiagnostics.logOnce();
+        if (client.level != lastLevel) {
+            lastLevel = client.level;
+            FrameTimeSampler.onWorldChanged();
+        }
+        // Decide here, at 20 Hz, whether the frames being rendered count - so
+        // the per-frame hook itself reads nothing but a volatile boolean.
+        FrameTimeSampler.tick(client);
         // Feed the adaptive render-distance controller first so the cap it
         // publishes is applied by RenderTweaks in the same tick.
         AdaptiveDistance.tick(client);

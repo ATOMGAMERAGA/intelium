@@ -1,8 +1,11 @@
 package com.intelium.config;
 
+import com.intelium.Capabilities;
+import com.intelium.Capability;
 import com.intelium.Intelium;
 import com.intelium.RenderBackend;
 import com.intelium.client.ChunkLoadingBooster;
+import com.intelium.client.FrameReportExporter;
 import com.intelium.client.InteliumGame;
 import com.intelium.client.RenderBudgetDriver;
 import com.intelium.client.RenderTweaks;
@@ -39,6 +42,29 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
      */
     private static Component tooltipWithStatus(String key) {
         return Component.translatable(key).append("\n\n").append(statusTooltip());
+    }
+
+    /**
+     * A tooltip that says why an option is greyed out when its hook could not
+     * attach.
+     *
+     * <p>A disabled control with no explanation is the thing this release set
+     * out to remove: previously a feature whose hook had silently failed still
+     * looked available, and one that was correctly greyed out never said why.
+     * The reason comes from the capability registry, so it names the actual
+     * class and descriptor that changed.
+     */
+    private static Component tooltipWithCapability(String key, Capability capability) {
+        Component base = tooltipWithStatus(key);
+        if (Capabilities.available(capability)) return base;
+        String reason = Capabilities.reason(capability);
+        Component why = reason == null
+                ? Component.translatable("intelium.capability.unavailable.unknown")
+                : Component.literal(reason);
+        return base.copy()
+                .append("\n\n")
+                .append(Component.translatable("intelium.capability.unavailable",
+                        Component.translatable(capability.displayKey), why));
     }
 
     /** Live status line shown as the tooltip on the interactive options. */
@@ -104,14 +130,17 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                         )
                         .addOption(builder.createIntegerOption(id("chunk_workers"))
                                 .setName(Component.translatable("intelium.options.chunk_workers"))
-                                .setTooltip(v -> tooltipWithStatus("intelium.options.chunk_workers.tooltip"))
+                                .setTooltip(v -> tooltipWithCapability("intelium.options.chunk_workers.tooltip",
+                                        Capability.WORKER_TUNING))
                                 .setRange(0, 16, 1)
                                 .setValueFormatter(value -> value <= 0
                                         ? Component.translatable("intelium.options.chunk_workers.auto")
                                         : Component.literal(Integer.toString(value)))
                                 .setStorageHandler(saveHook)
                                 .setEnabledProvider(state ->
-                                        Intelium.IS_COMPATIBLE && Intelium.WORKER_TUNING_AVAILABLE)
+                                        Intelium.IS_COMPATIBLE
+                                        && com.intelium.Capabilities.available(
+                                                com.intelium.Capability.WORKER_TUNING))
                                 .setBinding(v -> cfg.chunkBuildWorkers = v,
                                             () -> Math.max(0, cfg.chunkBuildWorkers))
                                 .setApplyHook(state -> InteliumGame.reloadChunks())
@@ -326,10 +355,12 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                         )
                         .addOption(builder.createEnumOption(id("entity_culling"), CullingStrength.class)
                                 .setName(Component.translatable("intelium.options.entity_culling"))
-                                .setTooltip(Component.translatable("intelium.options.entity_culling.tooltip"))
+                                .setTooltip(tooltipWithCapability("intelium.options.entity_culling.tooltip",
+                                        Capability.ENTITY_CULLING))
                                 .setElementNameProvider(s -> Component.translatable(s.displayKey()))
                                 .setStorageHandler(saveHook)
-                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget
+                                        && Capabilities.available(Capability.ENTITY_CULLING))
                                 .setBinding(v -> cfg.entityCulling = v.key,
                                             () -> CullingStrength.fromKey(cfg.entityCulling))
                                 .setApplyHook(state -> RenderBudgetDriver.apply())
@@ -337,10 +368,12 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                         )
                         .addOption(builder.createEnumOption(id("block_entity_culling"), CullingStrength.class)
                                 .setName(Component.translatable("intelium.options.block_entity_culling"))
-                                .setTooltip(Component.translatable("intelium.options.block_entity_culling.tooltip"))
+                                .setTooltip(tooltipWithCapability("intelium.options.block_entity_culling.tooltip",
+                                        Capability.BLOCK_ENTITY_BUDGET))
                                 .setElementNameProvider(s -> Component.translatable(s.displayKey()))
                                 .setStorageHandler(saveHook)
-                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget
+                                        && Capabilities.available(Capability.BLOCK_ENTITY_BUDGET))
                                 .setBinding(v -> cfg.blockEntityCulling = v.key,
                                             () -> CullingStrength.fromKey(cfg.blockEntityCulling))
                                 .setApplyHook(state -> RenderBudgetDriver.apply())
@@ -348,10 +381,12 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                         )
                         .addOption(builder.createEnumOption(id("particle_budget"), CullingStrength.class)
                                 .setName(Component.translatable("intelium.options.particle_budget"))
-                                .setTooltip(Component.translatable("intelium.options.particle_budget.tooltip"))
+                                .setTooltip(tooltipWithCapability("intelium.options.particle_budget.tooltip",
+                                        Capability.PARTICLE_LIMITER))
                                 .setElementNameProvider(s -> Component.translatable(s.displayKey()))
                                 .setStorageHandler(saveHook)
-                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE && cfg.renderBudget
+                                        && Capabilities.available(Capability.PARTICLE_LIMITER))
                                 .setBinding(v -> cfg.particleBudget = v.key,
                                             () -> CullingStrength.fromKey(cfg.particleBudget))
                                 .setApplyHook(state -> RenderBudgetDriver.apply())
@@ -371,14 +406,33 @@ public class InteliumConfigEntryPoint implements ConfigEntryPoint {
                         .setName(Component.translatable("intelium.options.group.chunks"))
                         .addOption(builder.createEnumOption(id("fast_chunks"), ChunkLoadingMode.class)
                                 .setName(Component.translatable("intelium.options.fast_chunks"))
-                                .setTooltip(Component.translatable("intelium.options.fast_chunks.tooltip"))
+                                .setTooltip(tooltipWithCapability("intelium.options.fast_chunks.tooltip",
+                                        Capability.DEFER_TUNING))
                                 .setElementNameProvider(m -> Component.translatable(m.displayKey()))
                                 .setStorageHandler(saveHook)
-                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE)
+                                .setEnabledProvider(state -> Intelium.IS_COMPATIBLE
+                                        && Capabilities.available(Capability.DEFER_TUNING))
                                 .setBinding(v -> cfg.chunkLoadingMode = v.key,
                                             () -> ChunkLoadingMode.fromKey(cfg.chunkLoadingMode))
                                 .setApplyHook(state -> { ChunkLoadingBooster.apply(); InteliumGame.reloadChunks(); })
                                 .setDefaultValue(ChunkLoadingMode.FAST)
+                        )
+                )
+                .addOptionGroup(builder.createOptionGroup()
+                        .setName(Component.translatable("intelium.options.group.diagnostics"))
+                        // An action button rather than a keybind: no default key
+                        // to collide with a third-party client's bindings, and no
+                        // extra Fabric API module required at runtime. The screen
+                        // is deliberately left as it is - this exports, it does
+                        // not navigate.
+                        .addOption(builder.createExternalButtonOption(id("frame_report"))
+                                .setName(Component.translatable("intelium.options.frame_report"))
+                                .setTooltip(Component.translatable(
+                                        "intelium.options.frame_report.tooltip"))
+                                .setEnabledProvider(state -> Capabilities.available(
+                                        Capability.FRAME_BOUNDARY))
+                                .setScreenConsumer(parent -> FrameReportExporter.exportAndTell(
+                                        net.minecraft.client.Minecraft.getInstance()))
                         )
                 )
         );

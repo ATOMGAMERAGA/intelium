@@ -1,11 +1,11 @@
 package com.intelium.mixin.client;
 
 import com.intelium.optimization.RenderBudget;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.AABB;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -23,15 +23,41 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * covers - <em>apparent size</em>, which is what actually decides whether you
  * could have seen it (see {@code RenderBudgetTuning}).
  *
- * <p>Three things are never culled, whatever the numbers say: the entity the
- * camera is attached to, players, and anything wearing a name tag - the last two
- * because their labels are gameplay information, not decoration. Nothing within
- * {@code RenderBudgetTuning.NEVER_CULL_RADIUS} is culled either; that check
- * lives in the shared logic.
+ * <h2>What is never culled</h2>
+ *
+ * <p>An optimization that hides something a player needed to see is not an
+ * optimization, it is a bug that happens to raise a number. On a UHC or PvP
+ * server the list of things that matter is specific, so it is enumerated here
+ * rather than left to a distance threshold:
+ *
+ * <ul>
+ *   <li><b>Players</b> - always, at any distance.</li>
+ *   <li><b>The camera entity</b> - what you are looking out of.</li>
+ *   <li><b>Projectiles</b> - arrows, tridents, thrown potions, fireballs.
+ *       Seeing one coming is the whole of the fight.</li>
+ *   <li><b>Named entities</b> - name tags are information, and holograms and
+ *       labelled armour stands are how servers build their UI.</li>
+ *   <li><b>Glowing / outlined entities</b> - something has deliberately marked
+ *       these as things to look at, usually a spectator or a team highlight.</li>
+ *   <li><b>Vehicles and their riders</b> - the horse you are on, the boat
+ *       someone is escaping in, a mob riding another mob.</li>
+ *   <li>Anything within {@code RenderBudgetTuning.NEVER_CULL_RADIUS}, which the
+ *       shared logic enforces.</li>
+ * </ul>
+ *
+ * <h2>Cost</h2>
+ *
+ * <p>The gate is one volatile read, and it is first: with the budget off this
+ * hook is a load and a branch. The camera test is an int compare against an id
+ * the client tick publishes, rather than the {@code Minecraft.getInstance()}
+ * call and field chase it used to do for every entity of every frame. The
+ * remaining checks are an {@code instanceof} and a few flag reads, all on an
+ * object already in cache because vanilla is about to ask it for its bounding
+ * box anyway.
  *
  * <p>{@code remap = false}: the 26.x line is unobfuscated, so these names are
- * already the runtime names. {@code InteliumClientMixinPlugin} checks the target
- * still exists before this is applied at all.
+ * already the runtime names. {@code InteliumClientMixinPlugin} verifies the
+ * target method's full descriptor before this is applied at all.
  */
 @Mixin(value = EntityRenderer.class, remap = false)
 public abstract class MixinEntityRenderer {
@@ -41,10 +67,7 @@ public abstract class MixinEntityRenderer {
                                            double cameraX, double cameraY, double cameraZ,
                                            CallbackInfoReturnable<Boolean> cir) {
         if (!RenderBudget.entityCullingOn()) return;
-        if (entity instanceof Player || entity.hasCustomName()) return;
-
-        Minecraft mc = Minecraft.getInstance();
-        if (mc != null && entity == mc.getCameraEntity()) return;
+        if (isProtected(entity)) return;
 
         // Bounding-box fields rather than accessors: they are public and have
         // outlived several renames of the size getters around them.
@@ -59,5 +82,21 @@ public abstract class MixinEntityRenderer {
         if (RenderBudget.shouldCullEntity(sizeBlocks, dx * dx + dy * dy + dz * dz)) {
             cir.setReturnValue(false);
         }
+    }
+
+    /**
+     * Whether this entity is exempt from culling whatever its apparent size.
+     * Ordered cheapest-and-commonest first, so the usual case (an ordinary mob
+     * or a dropped item) exits after two tests.
+     */
+    private static boolean isProtected(Entity entity) {
+        if (entity instanceof Player) return true;
+        if (RenderBudget.isCameraEntity(entity.getId())) return true;
+        if (entity instanceof Projectile) return true;
+        if (entity.hasCustomName()) return true;
+        if (entity.isCurrentlyGlowing()) return true;
+        // A vehicle carrying someone, or a passenger being carried: both halves
+        // of the pair stay visible, so a mount never renders without its rider.
+        return entity.isVehicle() || entity.isPassenger();
     }
 }

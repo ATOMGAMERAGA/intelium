@@ -42,13 +42,14 @@ public interface MixinBlockEntityRenderer {
         double dx = pos.getX() + 0.5 - cameraPos.x;
         double dy = pos.getY() + 0.5 - cameraPos.y;
         double dz = pos.getZ() + 0.5 - cameraPos.z;
-        double distanceSq = dx * dx + dy * dy + dz * dz;
 
-        if (RenderBudget.shouldCullBlockEntity(distanceSq)) {
-            cir.setReturnValue(false);
-            return;
-        }
-        if (!RenderBudget.allowBlockEntity(System.nanoTime())) {
+        // One shared call for both questions - too small to make out, and over
+        // this frame's allowance - which also guarantees a nearby block entity
+        // is never the one dropped because of where it fell in the iteration.
+        // 1.21.11 has no frame-boundary hook, so the budget still infers
+        // boundaries from call timing here; the fairness guarantee does not
+        // depend on that.
+        if (RenderBudget.shouldSkipBlockEntity(dx * dx + dy * dy + dz * dz)) {
             cir.setReturnValue(false);
         }
     }

@@ -20,14 +20,6 @@ public class Intelium implements ClientModInitializer {
      */
     public static volatile boolean SODIUM_OK = false;
 
-    /**
-     * Whether the chunk-worker tuning hook could be applied to the running
-     * Sodium build (set by {@link com.intelium.mixin.InteliumMixinPlugin}). When
-     * false, the feature self-disabled because this Sodium version's internals
-     * differ - everything else still works.
-     */
-    public static volatile boolean WORKER_TUNING_AVAILABLE = false;
-
     public static volatile IntelGpuGeneration DETECTED_GENERATION = IntelGpuGeneration.UNKNOWN;
 
     /** Raw graphics-device name captured at detection time, for status display. */

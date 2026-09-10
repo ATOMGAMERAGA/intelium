@@ -31,6 +31,21 @@ public class InteliumClientInit implements ClientModInitializer {
         // so logs make the compatibility behaviour visible.
         ModCompat.logOnce();
 
+        // On 1.21.11 the vanilla render-path hooks are validated against the
+        // Yarn mappings by the mixin annotation processor at compile time, which
+        // is a stronger guarantee than a load-time lookup: if a selector did not
+        // resolve, this jar would not have built. So they are reported available
+        // here rather than gated at runtime the way the 26.x hooks are.
+        //
+        // The frame-boundary hook is 26.x-only, so it stays unavailable and the
+        // block-entity budget keeps inferring frame boundaries from call timing.
+        com.intelium.Capabilities.set(com.intelium.Capability.ENTITY_CULLING, true, null);
+        com.intelium.Capabilities.set(com.intelium.Capability.BLOCK_ENTITY_BUDGET, true, null);
+        com.intelium.Capabilities.set(com.intelium.Capability.PARTICLE_LIMITER, true, null);
+        com.intelium.Capabilities.set(com.intelium.Capability.MENU_DETECTION, true, null);
+        com.intelium.Capabilities.set(com.intelium.Capability.FRAME_BOUNDARY, false,
+                "the per-frame hook is 26.x only; frame boundaries are inferred here");
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             // Fail soft: one escaped exception from a tick handler crashes the
             // whole game, which is exactly the failure mode every Intelium

@@ -54,6 +54,23 @@ public final class RenderBudget {
     private static final TickBudget PARTICLES = new TickBudget();
 
     /**
+     * Id of the entity the camera is attached to, published once per tick.
+     *
+     * <p>The entity hook needs to know "is this the thing I am looking out of?"
+     * for every entity of every frame. It used to answer that with
+     * {@code Minecraft.getInstance().getCameraEntity()} - a static call and a
+     * field chase, per entity, per frame, to re-derive something that changes
+     * at most once a tick. Publishing the id here turns it into an int compare.
+     *
+     * <p>{@link #NO_CAMERA_ENTITY} means "unknown", which reads downstream as
+     * "exempt nothing on this basis" - the safe direction, since the other
+     * exemptions still apply.
+     */
+    public static final int NO_CAMERA_ENTITY = Integer.MIN_VALUE;
+
+    private static volatile int cameraEntityId = NO_CAMERA_ENTITY;
+
+    /**
      * Recomputes every budget from the current config and camera. Called once
      * per client tick, before anything renders.
      *
@@ -120,6 +137,25 @@ public final class RenderBudget {
         PARTICLES.reset();
     }
 
+    /** Publishes the camera entity's id for this tick. */
+    public static void setCameraEntityId(int entityId) {
+        cameraEntityId = entityId;
+    }
+
+    /** The camera entity's id, or {@link #NO_CAMERA_ENTITY} when unknown. */
+    public static int cameraEntityId() {
+        return cameraEntityId;
+    }
+
+    /**
+     * Whether this entity id is the camera's. False when the camera is unknown,
+     * so a missing publication can never exempt an arbitrary entity.
+     */
+    public static boolean isCameraEntity(int entityId) {
+        int id = cameraEntityId;
+        return id != NO_CAMERA_ENTITY && id == entityId;
+    }
+
     /** Whether the engine is live at all. */
     public static boolean isActive() {
         return state.active;
@@ -167,6 +203,20 @@ public final class RenderBudget {
     }
 
     /**
+     * Announces a real frame boundary to the block-entity budget. Driven by the
+     * verified per-frame hook; until it is first called, the budget infers
+     * boundaries from timing instead.
+     */
+    public static void beginFrame() {
+        BLOCK_ENTITIES.beginFrame();
+    }
+
+    /** Whether the frame budget is being told its boundaries rather than guessing. */
+    public static boolean hasFrameBoundaryHook() {
+        return BLOCK_ENTITIES.hasExplicitBoundaries();
+    }
+
+    /**
      * Claims one block-entity draw out of this frame's allowance.
      *
      * @param nowNanos {@code System.nanoTime()}; used to spot the frame boundary
@@ -176,6 +226,47 @@ public final class RenderBudget {
         State s = state;
         if (!s.active || s.blockEntityLimit <= 0) return true;
         return BLOCK_ENTITIES.tryConsume(nowNanos, s.blockEntityLimit);
+    }
+
+    /**
+     * The whole block-entity decision in one call: too far to make out, or over
+     * this frame's allowance?
+     *
+     * <h2>Why distance is checked before the count</h2>
+     *
+     * <p>A pure per-frame counter is first-come-first-served, and nothing
+     * promises that block entities arrive in distance order. Whichever ones the
+     * iteration happens to reach last are the ones refused - so in a storage
+     * room, the chest the player is standing in front of could stop drawing
+     * while identical chests forty blocks away kept drawing, and which ones
+     * blinked would change as the player turned. That is worse than the frame
+     * cost it saves.
+     *
+     * <p>So anything inside {@link RenderBudgetTuning#NEVER_CULL_RADIUS} is
+     * drawn unconditionally, whatever the count says, and only counted so the
+     * accounting stays honest. The ceiling then applies to the distant
+     * population, where dropping one is invisible and the order does not
+     * matter.
+     *
+     * <p>Reads no clock when the frame-boundary hook is available.
+     *
+     * @param distanceSq squared distance from the camera, in blocks
+     * @return true when this block entity should not be drawn
+     */
+    public static boolean shouldSkipBlockEntity(double distanceSq) {
+        State s = state;
+        if (!s.active) return false;
+        if (RenderBudgetTuning.tooSmallToDraw(BLOCK_ENTITY_SIZE, distanceSq,
+                s.pixelScale, s.blockEntityMinPixels)) {
+            return true;
+        }
+        if (s.blockEntityLimit <= 0) return false;
+        if (distanceSq <= RenderBudgetTuning.NEVER_CULL_RADIUS_SQ) {
+            // Near enough that refusing it would be seen. Count it, draw it.
+            BLOCK_ENTITIES.consumeExempt();
+            return false;
+        }
+        return !BLOCK_ENTITIES.tryConsume(s.blockEntityLimit);
     }
 
     /** How many block-entity draws the previous frame skipped. */

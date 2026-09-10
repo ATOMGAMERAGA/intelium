@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INTELIUM_VERSION: "1.3.3"
+  INTELIUM_VERSION: "1.3.4"
 
 jobs:
   build:
@@ -36,11 +36,11 @@ jobs:
           - target: mc1.21.11
             java: '21'
             label: '1.21.11'
-            jarname: 'Intelium-v1.3.3-1.21.11.jar'
+            jarname: 'Intelium-v1.3.4-1.21.11.jar'
           - target: mc26
             java: '25'
-            label: '26.x'
-            jarname: 'Intelium-v1.3.3-26.x.jar'
+            label: '26.2'
+            jarname: 'Intelium-v1.3.4-26.2.jar'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -124,10 +124,10 @@ jobs:
 
             Two jars, one per Minecraft line. Download the one matching your version:
 
-            | Jar | Minecraft | Java |
-            |---|---|---|
-            | `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` | 1.21.11 | 21 |
-            | `Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar` | 26.1, 26.1.1, 26.1.2, 26.2 | 25 |
+            | Jar | Minecraft | Java | Renderer |
+            |---|---|---|---|
+            | `Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar` | 1.21.11 | 21 | OpenGL |
+            | `Intelium-v${{ env.INTELIUM_VERSION }}-26.2.jar` | 26.2 | 25 | OpenGL (default) / Vulkan (experimental) |
 
             SHA-256 and SHA-512 checksum files are attached beside each jar.
 
@@ -140,55 +140,105 @@ jobs:
             ````markdown
             ## English
 
-            **Intelium 1.3.3 — the OpenGL frame-pacing and chunk-streaming update.** The 26.x line already had Vulkan-aware scheduling; this release gives Minecraft 26.1's OpenGL renderer and the 1.21.11 build their own guarded tuning path. The goal is not a risky renderer replacement or undocumented driver switch: it is less render-thread contention, faster chunk appearance when headroom exists, and steadier frame times when it does not.
+            **Intelium 1.3.4 — the OpenGL correctness update.** Minecraft 26.2 ships **OpenGL as its default renderer**, with Vulkan as an experimental opt-in. Intelium's 26.x jar had been written and documented the other way round, and several of its decisions followed from that mistake. This release fixes the premise and everything that rested on it. Vulkan support is unchanged; OpenGL is now the first-class target it should always have been.
 
-            ### OpenGL performance (26.1.x + Minecraft 1.21.11)
+            ### Profiles now do what their names say
 
-            - **Backend-aware `Auto` chunk workers.** With Fast Chunk Loading enabled, the old Balanced policy could use all but one logical processor. OpenGL mesh uploads and substantial Intel driver work also use the render path, so Max FPS and Balanced now preserve two logical processors where possible. Smooth remains the explicit higher-throughput choice, and a manual `1–16` value is still honored exactly.
-            - **Adaptive Fast Chunk Loading.** Fast still uses Sodium's one-frame defer for quick chunk appearance. Only after sustained OpenGL FPS pressure does Intelium temporarily use Sodium's conservative defer mode, preventing completed-mesh uploads from amplifying an already struggling frame. A separate severe-collapse path reacts sooner; recovery requires three stable seconds, so the mode does not oscillate near the target.
-            - **Turbo stays Turbo.** Zero-frame upload remains an explicit fastest-loading choice and is never adaptively slowed. Off still restores the user's captured Sodium setting. Vulkan keeps its established behavior and does not enter the OpenGL governor.
-            - **Bad samples cannot steer chunk pacing.** Background, unfocused, menu-capped, invalid and 1.21.11 A/B benchmark samples pause transition counters. They neither trigger protection nor falsely claim recovery.
-            - **OpenGL draw-call tuning.** Intelium's own screen-space thresholds are raised by a modest 10% on OpenGL, the high-count block-entity ceiling is trimmed by 25%, and the extreme particle-burst ceiling by 12.5%. The changes affect distant/tiny objects and overloaded scenes; the 12-block safety radius, players, named entities and disabled budgets remain untouched.
+            - **"Max FPS" no longer costs you FPS.** Every profile used to force Sodium's one-frame chunk deferral, so Max FPS and Smooth produced identical upload behaviour and the label was simply wrong. Chunk uploads run on the render thread: forcing them buys faster chunk appearance and pays for it in frame time. Max FPS now uses Sodium's conservative deferral — the same setting Lunar Client's own FPS guidance recommends — while **Smooth** keeps one-frame deferral because streaming terrain ahead of the player is what that profile is for.
+            - **Balanced is the only adaptive one.** It uses one-frame deferral while there is headroom and falls back to conservative deferral under sustained, measured pressure, with the existing hysteresis. Max FPS and Smooth are fixed decisions, so the governor is no longer left holding state it will never apply.
+            - **Turbo is still exactly what you asked for.** Zero-frame deferral remains a user decision, never adaptively slowed, on any backend under any profile.
 
-            ### General FPS and stability improvements
+            ### Chunk workers on low-core Intel parts
 
-            - The particle spawn hook now makes one published-state read instead of two for every spawn. This removes avoidable hot-path overhead during the large bursts the limiter is designed to handle.
-            - The rolling FPS tracker now maintains its average in O(1), and its 1% low/minimum distribution is sorted at most once per new sample rather than repeatedly on every overlay frame. Intelium's measurement UI no longer adds needless work to the result it is measuring.
-            - The OpenGL governor, backend render policy, worker bounds, recovery hysteresis, unmeasurable-sample behavior, Turbo/Vulkan isolation and rolling-window wraparound all live in shared deterministic logic with regression coverage.
-            - Every new path fails in the safe direction: unknown future backends keep the prior policy, disabled budgets stay disabled, invalid FPS readings hold state, and inaccessible Sodium internals still self-disable without crashing the game.
-            - No config migration is required. Existing profiles, captured option restoration, compatibility gates and the verified Fabric/Sodium baselines are retained.
+            - **`availableProcessors()` was overstating the machine.** An HD Graphics 520 lives in a two-core, four-thread mobile CPU. The old policy handed two of those four logical processors to chunk meshing on Balanced and three on Smooth, so mesh threads and the render thread contended for the same two physical cores — which is how a mod meant to remove hitches can cause them.
+            - On **Gen 9 / Gen 9.5 with at most four logical processors, on OpenGL**, Auto now caps workers at **1 for Max FPS** and **2 for Balanced and Smooth**. It is a ceiling only: a machine that would already have been given fewer keeps its lower number, newer generations and other backends are untouched, and a manual `1–16` value is still honoured exactly.
 
-            Two jars: `Intelium-v1.3.3-1.21.11.jar` (Java 21) or `Intelium-v1.3.3-26.x.jar` (Java 25). Full Türkçe and English localisation. FPS gains remain scene-, driver- and hardware-dependent; 1.3.3 focuses equally on average FPS and stable frame delivery while terrain streams.
+            ### Real frame-time measurement
+
+            - **A new `FrameTimeTracker`, fed by a verified per-frame hook.** `Minecraft#getFps()` is a trailing whole-second average that cannot represent a 40 ms hitch at all — it reports 58 instead of 60 — and Intelium's adaptive systems were being steered by it. Frame intervals are now measured at `Minecraft.renderFrame`, giving median, p95, p99, 1% low and 0.1% low.
+            - **It does not cost the frames it measures.** The hot path is a subtract and two array stores into a preallocated ring buffer, with no allocation. Percentiles are computed at most once per new sample, and only when something actually asks — in normal play the sort never runs.
+            - **Bad samples cannot steer anything.** Unfocused frames, menu-capped frames and frames with no world loaded are dropped and restart the warm-up; loading a world restarts it too. VSync and FPS caps are **flagged rather than discarded**, because discarding them would starve the tracker on the majority of machines while throwing away the spikes that matter most.
+
+            ### Render-path cost and what must never be culled
+
+            - **No more `Minecraft.getInstance()` per entity, per frame.** The camera entity's id is published once per tick, so the hook's "am I the camera?" test is an int compare.
+            - **No more `System.nanoTime()` per block entity.** The per-frame hook announces real frame boundaries, so the block-entity budget stops inferring them from call timing. The timing heuristic remains as a fallback if the hook ever cannot be applied.
+            - **A nearby chest can no longer vanish while a distant one draws.** The per-frame ceiling was first-come-first-served, so whichever block entities the iteration reached last were refused — and which ones blinked changed as you turned. Anything within 12 blocks is now drawn unconditionally and the ceiling applies only to the distant population.
+            - **PvP and UHC exemptions are explicit.** Players, the camera entity, **projectiles** (arrows, tridents, thrown potions), named entities and holograms, **glowing/outlined entities**, and **vehicles together with their riders** are never culled at any distance.
+
+            ### Honest capability reporting
+
+            - **Full method descriptors are verified, not just names.** A hook whose target changed signature used to be applied anyway, match nothing, pass silently under `require = 0`, and leave the settings screen offering a feature that did nothing. Every target is now checked by exact descriptor against the running game.
+            - **Eight capabilities fail independently.** GPU detection, worker tuning, defer tuning, entity culling, the block-entity budget, the particle limiter, menu detection and the frame boundary each record their own state and reason. One missing hook disables one feature, never the mod, and never silently.
+            - **One environment report, once.** Minecraft, Fabric Loader, Fabric API, Sodium and Iris versions, detected backend, GPU and generation, and every capability's state — logged once after detection settles, never per tick.
+
+            ### One thing deliberately not added
+
+            A one-click preset for Sodium's own performance options — Block Face Culling, Fog Occlusion, Entity Culling, Animate Only Visible Textures, Hidden Fluid Culling, Block Transparency — was investigated and rejected on the evidence. Checked against the resolved Sodium 0.9.1 jar, every one of them **already ships at its optimal value**: the five performance flags default to `true`, `hiddenFluidCulling` defaults to `true`, `quadSplittingMode` defaults to `SAFE`, and `chunkBuildDeferMode` defaults to `ALWAYS`. Forcing them would be a no-op for almost everyone and, for the few who changed one deliberately, would silently overwrite their choice. A switch that does nothing is worse than no switch.
+
+            ### Compatibility
+
+            - **The 26.x jar now declares `>=26.2 <26.3`.** It compiles directly against 26.2 class and method names, and 26.1 support was never runtime-tested. The old `>=26.1 <26.3` range was a claim the build could not back, so it is gone rather than left to fail confusingly on someone's machine.
+            - **A device reporting no backend name resolves to OpenGL**, because on 26.x that is what it is running — Vulkan identifies itself. A name that is present but unrecognised still resolves to Unknown and keeps the conservative policy.
+            - **Lunar Client:** no Sodium, Fabric, Iris or Lunar files are bundled, no private or guessed client APIs are used, no invented mod ids are probed, and Lunar's own HUD caching, entity handling, FPS limits and present path are left alone. The same jar runs on stock Fabric 26.2. A jar-contents test now enforces that nothing gets bundled.
+            - Iris loaded or not, startup is unaffected: the mixin plugins still look classes up as classpath resources rather than loading them, so Iris's own Sodium mixins are never pre-empted.
+
+            No config migration is required. Existing profiles, captured-option restoration and compatibility gates are retained. FPS gains remain scene-, driver- and hardware-dependent; the measured claims here are about where work was removed, not a promised percentage.
 
             ## Türkçe (Turkish)
 
-            **Intelium 1.3.3 — OpenGL kare süreleri ve chunk akışı güncellemesi.** 26.x serisinde Vulkan'a duyarlı zamanlama zaten vardı; bu sürüm Minecraft 26.1'in OpenGL işleyicisine ve 1.21.11 derlemesine korumalı, kendilerine özel bir ayar yolu ekliyor. Amaç riskli bir işleyici değişimi veya belgelenmemiş sürücü anahtarı değil: render-thread çekişmesini azaltmak, boşluk varken chunk'ları hızlı göstermek ve boşluk yokken kare sürelerini düzenli tutmak.
+            **Intelium 1.3.4 — OpenGL doğruluğu güncellemesi.** Minecraft 26.2 **varsayılan olarak OpenGL** ile gelir; Vulkan deneysel bir seçenektir. Intelium'un 26.x jar'ı bunun tersini varsayacak şekilde yazılmış ve belgelenmişti ve bazı kararları bu hatadan geliyordu. Bu sürüm önce varsayımı, sonra ona dayanan her şeyi düzeltiyor. Vulkan desteği değişmedi; OpenGL artık baştan beri olması gereken birinci sınıf hedef.
 
-            ### OpenGL performansı (26.1.x + Minecraft 1.21.11)
+            ### Profiller artık adının söylediği şeyi yapıyor
 
-            - **Backend'e duyarlı `Otomatik` chunk işçileri.** Hızlı Chunk Yükleme açıkken eski Dengeli politika biri hariç bütün mantıksal işlemcileri kullanabiliyordu. OpenGL mesh upload'ları ve Intel sürücüsünün önemli bir bölümü de render yolunu kullandığı için Maksimum FPS ile Dengeli artık mümkün olduğunda iki mantıksal işlemciyi boş bırakıyor. Akıcı, açıkça seçilen yüksek akış profili olmaya devam ediyor; elle girilen `1–16` değeri yine aynen uygulanıyor.
-            - **Uyarlamalı Hızlı Chunk Yükleme.** Hızlı mod, chunk'ların çabuk görünmesi için normalde Sodium'un bir-kare ertelemesini kullanmaya devam ediyor. Intelium ancak uzun süren gerçek OpenGL FPS baskısından sonra geçici olarak Sodium'un korumalı ertelemesine dönüyor; böylece tamamlanan mesh upload'ları zaten zorlanan bir kareyi daha da ağırlaştırmıyor. Şiddetli çöküş yolu daha erken tepki veriyor; geri dönüş için üç kararlı saniye gerektiğinden mod hedef çevresinde ileri geri sıçramıyor.
-            - **Turbo, Turbo olarak kalıyor.** Sıfır-kare upload açıkça seçilen en hızlı yükleme davranışıdır ve uyarlamalı olarak yavaşlatılmaz. Kapalı modu kullanıcının yakalanmış Sodium ayarını geri yükler. Vulkan yerleşik davranışını korur ve OpenGL yöneticisine girmez.
-            - **Geçersiz ölçümler chunk akışını yönlendiremiyor.** Arka plan, odak dışı pencere, menü FPS sınırı, geçersiz örnek ve 1.21.11 A/B test örnekleri geçiş sayaçlarını duraklatır; ne korumayı yanlış tetikler ne de sahte toparlanma üretir.
-            - **OpenGL draw-call ayarı.** Intelium'un kendi ekran-uzayı eşikleri OpenGL'de ölçülü olarak %10 artırıldı; yüksek sayılı block-entity tavanı %25, aşırı particle burst tavanı %12,5 azaltıldı. Yalnız uzak/küçük nesneler ve aşırı yüklü sahneler hedeflenir; 12 blok güvenlik yarıçapı, oyuncular, isimli entity'ler ve kapalı bütçeler değişmez.
+            - **"Maksimum FPS" artık FPS'e mal olmuyor.** Eskiden bütün profiller Sodium'un bir-kare ertelemesini zorluyordu; böylece Maksimum FPS ile Akıcı aynı upload davranışını üretiyordu ve etiket basitçe yanlıştı. Chunk upload'ları render thread üzerinde çalışır: onları zorlamak chunk'ların hızlı görünmesini satın alır ve bedelini kare süresiyle öder. Maksimum FPS artık Sodium'un korumalı ertelemesini kullanıyor — Lunar Client'ın kendi FPS rehberinin de önerdiği ayar — **Akıcı** ise bir-kare ertelemeyi koruyor, çünkü araziyi oyuncunun önünde tutmak zaten o profilin varlık sebebi.
+            - **Uyarlamalı olan tek profil Dengeli.** Boşluk varken bir-kare erteleme kullanır, sürekli ve ölçülmüş baskı altında mevcut histerezisle korumalı ertelemeye döner. Maksimum FPS ve Akıcı sabit kararlar olduğu için yönetici artık hiç uygulamayacağı bir durumu tutmuyor.
+            - **Turbo hâlâ tam olarak istediğiniz şey.** Sıfır-kare erteleme kullanıcı kararıdır; hangi backend ve profil olursa olsun uyarlamalı olarak yavaşlatılmaz.
 
-            ### Genel FPS ve kararlılık iyileştirmeleri
+            ### Düşük çekirdekli Intel sistemlerde chunk işçileri
 
-            - Particle oluşturma kancası artık her spawn için yayımlanmış durumu iki kez yerine bir kez okuyor. Limiter'ın hedeflediği büyük patlamalarda gereksiz sıcak-yol maliyeti kaldırıldı.
-            - Hareketli FPS izleyicisi ortalamayı artık O(1) maliyetle tutuyor; %1 düşük/minimum dağılımı overlay'in her karesinde tekrar tekrar değil, yeni örnek başına en fazla bir kez sıralanıyor. Intelium'un ölçüm arayüzü ölçtüğü sonuca gereksiz yük eklemiyor.
-            - OpenGL yöneticisi, backend render politikası, işçi sınırları, toparlanma histerezisi, ölçülemeyen örnek davranışı, Turbo/Vulkan yalıtımı ve halka tampon sarma davranışı ortak deterministik mantıkta ve regresyon testleriyle korunuyor.
-            - Her yeni yol güvenli yönde hata veriyor: bilinmeyen gelecekteki backend'ler önceki politikayı koruyor, kapalı bütçeler kapalı kalıyor, geçersiz FPS ölçümleri durumu tutuyor ve erişilemeyen Sodium iç sınıfları oyunu çökertmeden kendini kapatmaya devam ediyor.
-            - Yapılandırma geçişi gerekmiyor. Mevcut profiller, yakalanan ayarların geri yüklenmesi, uyumluluk kapıları ve doğrulanmış Fabric/Sodium tabanları korunuyor.
+            - **`availableProcessors()` makineyi olduğundan büyük gösteriyordu.** HD Graphics 520, iki çekirdekli dört thread'li bir mobil işlemcinin içinde yaşar. Eski politika bu dört mantıksal işlemcinin ikisini Dengeli'de, üçünü Akıcı'da chunk meshing'e veriyordu; mesh thread'leri ile render thread aynı iki fiziksel çekirdek için yarışıyordu — takılmaları kaldırması gereken bir mod böyle takılma üretir.
+            - **Gen 9 / Gen 9.5 ve en fazla dört mantıksal işlemcili OpenGL sistemlerde** Otomatik artık işçi sayısını **Maksimum FPS için 1**, **Dengeli ve Akıcı için 2** ile sınırlıyor. Bu yalnızca bir tavandır: zaten daha azını alacak bir makine düşük değerini korur, yeni nesiller ve diğer backend'ler etkilenmez, elle girilen `1–16` değeri aynen uygulanır.
 
-            İki jar: `Intelium-v1.3.3-1.21.11.jar` (Java 21) veya `Intelium-v1.3.3-26.x.jar` (Java 25). Tam Türkçe ve İngilizce yerelleştirme. FPS kazancı sahneye, sürücüye ve donanıma göre değişir; 1.3.3 arazi yüklenirken hem ortalama FPS'e hem de kararlı kare sunumuna odaklanır.
+            ### Gerçek kare süresi ölçümü
+
+            - **Doğrulanmış bir kare kancasıyla beslenen yeni `FrameTimeTracker`.** `Minecraft#getFps()` bir saniyelik gecikmeli ortalamadır ve 40 ms'lik bir takılmayı hiç gösteremez — 60 yerine 58 yazar — oysa Intelium'un uyarlamalı sistemleri bu sinyalle yönetiliyordu. Kare aralıkları artık `Minecraft.renderFrame` noktasında ölçülüyor: medyan, p95, p99, %1 düşük ve %0,1 düşük.
+            - **Ölçtüğü karelere maliyet çıkarmıyor.** Sıcak yol bir çıkarma ve önceden ayrılmış halka tampona iki dizi yazmasıdır; allocation yoktur. Yüzdelikler her yeni örnek için en fazla bir kez ve yalnızca gerçekten sorulursa hesaplanır — normal oyunda sıralama hiç çalışmaz.
+            - **Geçersiz örnekler hiçbir şeyi yönlendiremez.** Odak dışı kareler, menü sınırlı kareler ve dünya yüklü değilken alınan kareler atılır ve ısınmayı baştan başlatır; dünya değişimi de baştan başlatır. VSync ve FPS sınırları **atılmaz, işaretlenir**; çünkü atmak makinelerin çoğunda izleyiciyi aç bırakır ve en önemli olan sivrilmeleri de beraberinde çöpe atardı.
+
+            ### Render yolu maliyeti ve asla gizlenmeyecekler
+
+            - **Her entity için her karede `Minecraft.getInstance()` yok.** Kamera entity'sinin kimliği tick başına bir kez yayımlanıyor; kancanın "kamera ben miyim?" testi bir int karşılaştırmasına dönüşüyor.
+            - **Her block entity için `System.nanoTime()` yok.** Kare kancası gerçek kare sınırlarını bildirdiği için block-entity bütçesi artık sınırı çağrı zamanlamasından tahmin etmiyor. Kanca uygulanamazsa eski zamanlama yöntemi yedek olarak duruyor.
+            - **Yakındaki bir sandık artık uzaktaki çizilirken kaybolamaz.** Kare tavanı "önce gelen alır" şeklindeydi; iterasyonun en son ulaştığı block entity'ler reddediliyordu ve hangilerinin kaybolacağı siz döndükçe değişiyordu. 12 blok içindeki her şey artık koşulsuz çiziliyor; tavan yalnızca uzaktaki nüfusa uygulanıyor.
+            - **PvP ve UHC muafiyetleri açıkça tanımlı.** Oyuncular, kamera entity'si, **mermiler** (ok, trident, atılan iksir), isimli entity'ler ve hologramlar, **parlayan/çerçevelenmiş entity'ler** ve **binekler ile binicileri** hiçbir mesafede gizlenmez.
+
+            ### Dürüst yetenek raporlaması
+
+            - **Yalnızca ad değil, tam method descriptor'ı doğrulanıyor.** Hedefinin imzası değişen bir kanca eskiden yine de uygulanıyor, hiçbir şeyle eşleşmiyor, `require = 0` altında sessizce geçiyor ve ayarlar ekranı hiçbir şey yapmayan bir özelliği sunmaya devam ediyordu. Artık her hedef, çalışan oyuna karşı tam descriptor ile kontrol ediliyor.
+            - **Sekiz yetenek bağımsız olarak düşebilir.** GPU algılama, işçi ayarı, erteleme ayarı, entity culling, block-entity bütçesi, particle limiter, menü algılama ve kare sınırı kendi durumunu ve sebebini tutar. Eksik bir kanca tek bir özelliği kapatır; modu kapatmaz ve asla sessiz kalmaz.
+            - **Tek bir ortam raporu, bir kez.** Minecraft, Fabric Loader, Fabric API, Sodium ve Iris sürümleri, tespit edilen backend, GPU ve nesil, ve her yeteneğin durumu — algılama oturduktan sonra bir kez loglanır, her tick değil.
+
+            ### Bilerek eklenmeyen bir şey
+
+            Sodium'un kendi performans seçenekleri için tek tıklık bir preset — Block Face Culling, Fog Occlusion, Entity Culling, Animate Only Visible Textures, Hidden Fluid Culling, Block Transparency — incelendi ve kanıta dayanarak eklenmedi. Çözümlenen Sodium 0.9.1 jar'ında kontrol edildiğinde hepsinin **zaten en iyi değerinde geldiği** görüldü: beş performans bayrağı `true`, `hiddenFluidCulling` `true`, `quadSplittingMode` `SAFE` ve `chunkBuildDeferMode` `ALWAYS` varsayılanına sahip. Bunları zorlamak neredeyse herkes için hiçbir şey yapmaz; bilerek değiştirmiş olan azınlık içinse tercihlerini sessizce ezerdi. Hiçbir şey yapmayan bir anahtar, hiç anahtar olmamasından kötüdür.
+
+            ### Uyumluluk
+
+            - **26.x jar'ı artık `>=26.2 <26.3` bildiriyor.** Doğrudan 26.2 sınıf ve method adlarına derleniyor ve 26.1 desteği hiçbir zaman çalışma anında test edilmedi. Eski `>=26.1 <26.3` aralığı derlemenin arkasında duramadığı bir iddiaydı; birinin makinesinde kafa karıştırıcı şekilde patlamasındansa kaldırıldı.
+            - **Backend adı bildirmeyen bir cihaz OpenGL olarak çözümlüyor**, çünkü 26.x'te çalıştığı şey odur — Vulkan kendini tanıtır. Var olan ama tanınmayan bir ad hâlâ Bilinmiyor olarak çözümlür ve korumalı politikayı sürdürür.
+            - **Lunar Client:** Sodium, Fabric, Iris veya Lunar dosyaları paketlenmez, özel veya tahminî istemci API'leri kullanılmaz, uydurma mod ID'leri sorgulanmaz ve Lunar'ın kendi HUD önbelleği, entity işleme, FPS sınırları ve present yolu ellenmez. Aynı jar standart Fabric 26.2'de de çalışır. Bir jar içerik testi artık hiçbir şeyin paketlenmediğini zorunlu kılıyor.
+            - Iris açık ya da kapalı, başlangıç etkilenmez: mixin eklentileri sınıfları yüklemek yerine classpath kaynağı olarak aradığı için Iris'in kendi Sodium mixin'lerinin önü kesilmez.
+
+            Yapılandırma geçişi gerekmiyor. Mevcut profiller, yakalanan ayarların geri yüklenmesi ve uyumluluk kapıları korunuyor. FPS kazancı sahneye, sürücüye ve donanıma göre değişir; buradaki iddialar işlerin nereden kaldırıldığıyla ilgilidir, vaat edilen bir yüzdeyle değil.
             ````
           files: |
             dist/Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar
             dist/Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar.sha256
             dist/Intelium-v${{ env.INTELIUM_VERSION }}-1.21.11.jar.sha512
-            dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar
-            dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar.sha256
-            dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.x.jar.sha512
+            dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.2.jar
+            dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.2.jar.sha256
+            dist/Intelium-v${{ env.INTELIUM_VERSION }}-26.2.jar.sha512
           draft: false
           prerelease: false
           generate_release_notes: false

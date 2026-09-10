@@ -56,6 +56,8 @@ public final class IntelGpuDetector {
             Intelium.DETECTED_GENERATION = IntelGpuGeneration.UNKNOWN;
             Intelium.IS_COMPATIBLE = false;
             Intelium.DISABLED_REASON_KEY = "intelium.disabled.device_unavailable";
+            Capabilities.set(Capability.GPU_DETECTION, false,
+                    "Blaze3D exposed no usable graphics device identity");
             Intelium.LOGGER.info("Intelium status: Blaze3D did not expose a usable graphics "
                     + "device identity - staying inactive instead of guessing.");
             return;
@@ -64,13 +66,20 @@ public final class IntelGpuDetector {
         if (!DETECTED.compareAndSet(false, true)) return;
         IntelGpuClassifier.Result result =
                 IntelGpuClassifier.decide(device.vendor(), device.name());
-        RenderBackend backend = RenderBackend.fromName(device.backend());
+        // 26.1 and 26.2 both default to OpenGL, with Vulkan an opt-in that
+        // names itself. A device that reports no backend name at all is
+        // therefore running OpenGL, and treating that as UNKNOWN would throw
+        // away the whole OpenGL tuning path on exactly the machines this mod
+        // exists for. A name that is present but unrecognised still resolves to
+        // UNKNOWN - see RenderBackend.resolveDefaultOpenGl.
+        RenderBackend backend = RenderBackend.resolveDefaultOpenGl(device.backend());
 
         Intelium.DETECTED_RENDERER = device.name();
         Intelium.DETECTED_BACKEND = backend;
         Intelium.DETECTED_GENERATION = result.generation;
         Intelium.IS_COMPATIBLE = result.compatible;
         Intelium.DISABLED_REASON_KEY = result.reasonKey;
+        Capabilities.set(Capability.GPU_DETECTION, true, null);
 
         Intelium.LOGGER.info(
                 "Intelium status: vendor='{}' device='{}' backend='{}' driver='{}' "

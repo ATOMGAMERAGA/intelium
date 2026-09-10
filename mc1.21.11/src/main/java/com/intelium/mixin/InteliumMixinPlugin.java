@@ -45,7 +45,8 @@ public class InteliumMixinPlugin implements IMixinConfigPlugin {
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (mixinClassName.endsWith("MixinChunkBuilder")) {
             boolean ok = classExists(CHUNK_BUILDER) && methodExists(CHUNK_BUILDER, "getThreadCount");
-            Intelium.WORKER_TUNING_AVAILABLE = ok;
+            com.intelium.Capabilities.set(com.intelium.Capability.WORKER_TUNING, ok,
+                    ok ? null : "Sodium's ChunkBuilder.getThreadCount() is absent");
             if (!ok) {
                 Intelium.LOGGER.warn("Intelium: Sodium ChunkBuilder.getThreadCount() not found on "
                         + "this Sodium build - chunk-worker tuning disabled (no crash).");
